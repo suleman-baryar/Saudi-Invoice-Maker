@@ -1,0 +1,6 @@
+{
+  "name": "Saudi Invoice Maker Pro",
+  "description": "Professional bilingual Saudi Arabia Simplified Tax Invoice Maker with ZATCA TLV QR code, barcode, VAT calculations, PDF generation, and customer management.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
