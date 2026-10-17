@@ -15,8 +15,22 @@ import {
   ShieldCheck,
   Lock,
   Smartphone,
+  Database,
+  Cloud,
+  ExternalLink,
+  RefreshCw,
+  Copy,
+  Check,
+  Stamp,
 } from 'lucide-react';
 import { WhatsAppIcon } from './WhatsAppIcon';
+import {
+  DEFAULT_SUPABASE_PROJECT_ID,
+  DEFAULT_SUPABASE_URL,
+  SUPABASE_SQL_SCHEMA,
+  syncAllToSupabase,
+  testSupabaseHealth,
+} from '../utils/supabaseClient';
 
 interface CompanySettingsProps {
   onSaved: () => void;
@@ -27,8 +41,42 @@ export const CompanySettings: React.FC<CompanySettingsProps> = ({ onSaved, lang 
   const [profile, setProfile] = useState<CompanyProfile>(storage.getCompany());
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [importStatus, setImportStatus] = useState<string | null>(null);
+  const [supabaseSyncStatus, setSupabaseSyncStatus] = useState<string | null>(null);
+  const [isSupabaseSyncing, setIsSupabaseSyncing] = useState(false);
+  const [isSqlCopied, setIsSqlCopied] = useState(false);
   const t = translations[lang].settings;
   const isRtl = lang === 'ar';
+
+  const handleSyncToSupabase = async () => {
+    setIsSupabaseSyncing(true);
+    setSupabaseSyncStatus(null);
+    try {
+      const invoices = storage.getInvoices();
+      const customers = storage.getCustomers();
+      const company = storage.getCompany();
+      const products = storage.getProducts();
+      const res = await syncAllToSupabase(invoices, customers, company, products);
+      if (res.success) {
+        setSupabaseSyncStatus(
+          isRtl
+            ? `تمت المزامنة بنجاح! تم رفع ${res.syncedCount} فاتورة إلى سوبابيز.`
+            : `Synced successfully! ${res.syncedCount} invoices uploaded to Supabase.`
+        );
+      } else {
+        setSupabaseSyncStatus(res.error || (isRtl ? 'فشلت المزامنة' : 'Sync failed'));
+      }
+    } catch (e: any) {
+      setSupabaseSyncStatus(e.message || (isRtl ? 'خطأ أثناء المزامنة' : 'Error during sync'));
+    } finally {
+      setIsSupabaseSyncing(false);
+    }
+  };
+
+  const handleCopySql = () => {
+    navigator.clipboard.writeText(SUPABASE_SQL_SCHEMA);
+    setIsSqlCopied(true);
+    setTimeout(() => setIsSqlCopied(false), 2500);
+  };
 
   const handleChange = (field: keyof CompanyProfile, value: unknown) => {
     setProfile((prev) => ({ ...prev, [field]: value }));
@@ -554,6 +602,175 @@ export const CompanySettings: React.FC<CompanySettingsProps> = ({ onSaved, lang 
           </div>
         </div>
 
+        {/* Invoice PDF & Print Watermark Settings (Paid / Draft) */}
+        <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-xs space-y-4">
+          <div className="flex items-center justify-between border-b border-slate-100 pb-2.5">
+            <h3 className="font-bold text-slate-900 text-sm flex items-center gap-2">
+              <Stamp className="w-5 h-5 text-indigo-600" />
+              <span>{isRtl ? 'العلامة المائية للفواتير وملفات PDF (Paid / Draft Watermark)' : 'Invoice & PDF Watermark Settings (Paid / Draft)'}</span>
+            </h3>
+            <label className="relative inline-flex items-center cursor-pointer">
+              <input
+                type="checkbox"
+                checked={profile.enableInvoiceWatermark ?? true}
+                onChange={(e) => handleChange('enableInvoiceWatermark', e.target.checked)}
+                className="sr-only peer"
+              />
+              <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600"></div>
+              <span className="ms-2 text-xs font-bold text-slate-700">
+                {(profile.enableInvoiceWatermark ?? true) ? (isRtl ? 'مفعلة ✓' : 'Enabled ✓') : (isRtl ? 'معطلة' : 'Disabled')}
+              </span>
+            </label>
+          </div>
+
+          <p className="text-xs text-slate-500 leading-relaxed">
+            {isRtl
+              ? 'إظهار ختم مائي شبه شفاف على الفاتورة المعروضة، وفي ملف الـ PDF بعد التنزيل وعند الطباعة. يمكنك اختيار إظهار ختم "مدفوعة" للفواتير المسددة، أو "مسودة" للفواتير غير المعتمدة.'
+              : 'Display an official semi-transparent watermark on invoices, downloaded PDF files, and printouts. Toggle between "Paid" or "Draft" watermark stamps.'}
+          </p>
+
+          {(profile.enableInvoiceWatermark ?? true) && (
+            <div className="space-y-3 pt-1">
+              <label className="block text-xs font-semibold text-slate-700">
+                {isRtl ? 'نوع الختم المائي المعروض على الفاتورة:' : 'Watermark Display Option:'}
+              </label>
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                {/* AUTO */}
+                <label
+                  className={`p-3 rounded-xl border cursor-pointer transition flex flex-col justify-between ${
+                    (profile.watermarkType || 'AUTO') === 'AUTO'
+                      ? 'bg-indigo-50/70 border-indigo-400 ring-2 ring-indigo-200'
+                      : 'bg-white hover:bg-slate-50 border-slate-200'
+                  }`}
+                >
+                  <div className="flex items-start gap-2">
+                    <input
+                      type="radio"
+                      name="watermarkType"
+                      value="AUTO"
+                      checked={(profile.watermarkType || 'AUTO') === 'AUTO'}
+                      onChange={() => handleChange('watermarkType', 'AUTO')}
+                      className="mt-0.5 text-indigo-600 focus:ring-indigo-500"
+                    />
+                    <div>
+                      <div className="font-bold text-xs text-slate-900">
+                        {isRtl ? 'تلقائي حسب حالة الفاتورة' : 'Automatic by Status'}
+                      </div>
+                      <div className="text-[11px] text-slate-500 mt-0.5 leading-snug">
+                        {isRtl
+                          ? 'يظهر "مدفوعة" إذا سُددت الفاتورة، و"مسودة" إذا كانت مسودة'
+                          : 'Shows "PAID" if paid, "DRAFT" if draft'}
+                      </div>
+                    </div>
+                  </div>
+                  <div className="mt-2 text-center text-[10px] font-bold text-indigo-700 bg-indigo-100/60 py-1 rounded">
+                    {isRtl ? 'موصى به لجميع الفواتير' : 'Recommended'}
+                  </div>
+                </label>
+
+                {/* PAID ONLY */}
+                <label
+                  className={`p-3 rounded-xl border cursor-pointer transition flex flex-col justify-between ${
+                    profile.watermarkType === 'PAID'
+                      ? 'bg-emerald-50/70 border-emerald-400 ring-2 ring-emerald-200'
+                      : 'bg-white hover:bg-slate-50 border-slate-200'
+                  }`}
+                >
+                  <div className="flex items-start gap-2">
+                    <input
+                      type="radio"
+                      name="watermarkType"
+                      value="PAID"
+                      checked={profile.watermarkType === 'PAID'}
+                      onChange={() => handleChange('watermarkType', 'PAID')}
+                      className="mt-0.5 text-emerald-600 focus:ring-emerald-500"
+                    />
+                    <div>
+                      <div className="font-bold text-xs text-slate-900">
+                        {isRtl ? 'ختم "مدفوعة / PAID" دائماً' : 'PAID Watermark Always'}
+                      </div>
+                      <div className="text-[11px] text-slate-500 mt-0.5 leading-snug">
+                        {isRtl
+                          ? 'يظهر ختم السداد المعتمد على جميع الفواتير'
+                          : 'Always displays PAID stamp on invoices'}
+                      </div>
+                    </div>
+                  </div>
+                  <div className="mt-2 text-center text-[10px] font-bold text-emerald-700 bg-emerald-100/60 py-1 rounded">
+                    مـدفـوعـة • PAID
+                  </div>
+                </label>
+
+                {/* DRAFT ONLY */}
+                <label
+                  className={`p-3 rounded-xl border cursor-pointer transition flex flex-col justify-between ${
+                    profile.watermarkType === 'DRAFT'
+                      ? 'bg-slate-100 border-slate-400 ring-2 ring-slate-200'
+                      : 'bg-white hover:bg-slate-50 border-slate-200'
+                  }`}
+                >
+                  <div className="flex items-start gap-2">
+                    <input
+                      type="radio"
+                      name="watermarkType"
+                      value="DRAFT"
+                      checked={profile.watermarkType === 'DRAFT'}
+                      onChange={() => handleChange('watermarkType', 'DRAFT')}
+                      className="mt-0.5 text-slate-700 focus:ring-slate-500"
+                    />
+                    <div>
+                      <div className="font-bold text-xs text-slate-900">
+                        {isRtl ? 'ختم "مسودة / DRAFT" دائماً' : 'DRAFT Watermark Always'}
+                      </div>
+                      <div className="text-[11px] text-slate-500 mt-0.5 leading-snug">
+                        {isRtl
+                          ? 'يظهر ختم مسودة للأغراض التجريبية والمراجعة'
+                          : 'Always displays DRAFT stamp for reviews'}
+                      </div>
+                    </div>
+                  </div>
+                  <div className="mt-2 text-center text-[10px] font-bold text-slate-700 bg-slate-200/80 py-1 rounded">
+                    مـسـودة • DRAFT
+                  </div>
+                </label>
+              </div>
+
+              {/* Watermark Live Preview Box */}
+              <div className="mt-3 p-3 bg-slate-50 border border-slate-200 rounded-xl">
+                <span className="text-[11px] font-bold text-slate-600 block mb-2">
+                  {isRtl ? 'معاينة شكل الختم المائي على الفاتورة والـ PDF:' : 'Watermark Live Preview on PDF:'}
+                </span>
+                <div className="relative h-24 bg-white border border-slate-200 rounded-lg overflow-hidden flex items-center justify-center p-3 select-none">
+                  {/* Subtle placeholder invoice lines behind */}
+                  <div className="absolute inset-0 p-3 opacity-20 flex flex-col justify-between pointer-events-none">
+                    <div className="h-2 bg-slate-400 rounded w-1/3"></div>
+                    <div className="h-2 bg-slate-300 rounded w-full"></div>
+                    <div className="h-2 bg-slate-300 rounded w-4/5"></div>
+                    <div className="h-2 bg-slate-400 rounded w-1/4"></div>
+                  </div>
+
+                  {/* Stamp Display */}
+                  <div
+                    className={`transform -rotate-12 px-6 py-1.5 rounded-xl border-3 border-dashed font-black text-center tracking-wider shadow-2xs z-10 ${
+                      profile.watermarkType === 'DRAFT'
+                        ? 'border-slate-500/60 text-slate-600 bg-slate-100/50'
+                        : 'border-emerald-600/60 text-emerald-700 bg-emerald-50/50'
+                    }`}
+                  >
+                    <div className="text-base sm:text-lg leading-tight">
+                      {profile.watermarkType === 'DRAFT' ? 'مـسـودة' : 'مـدفـوعـة'}
+                    </div>
+                    <div className="text-[10px] tracking-widest uppercase">
+                      {profile.watermarkType === 'DRAFT' ? 'DRAFT' : 'PAID IN FULL'}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+
         {/* Submit Button */}
         <div className="flex justify-end">
           <button
@@ -565,6 +782,73 @@ export const CompanySettings: React.FC<CompanySettingsProps> = ({ onSaved, lang 
           </button>
         </div>
       </form>
+
+      {/* Supabase Cloud Database & Storage Section */}
+      <div className="bg-emerald-50/60 p-5 rounded-xl border border-emerald-200 space-y-3.5">
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-emerald-200/80 pb-2.5">
+          <div className="flex items-center gap-2">
+            <Database className="w-5 h-5 text-emerald-700" />
+            <h3 className="font-extrabold text-slate-900 text-sm">
+              {isRtl ? 'قاعدة بيانات Supabase السحابية' : 'Supabase Cloud Database'}
+            </h3>
+            <span className="text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300 px-2 py-0.5 rounded-full flex items-center gap-1">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+              {isRtl ? 'المشروع متصل' : 'Connected'}
+            </span>
+          </div>
+          <span className="font-mono text-xs text-slate-600 bg-white px-2.5 py-1 rounded-md border border-slate-200">
+            Project: {DEFAULT_SUPABASE_PROJECT_ID}
+          </span>
+        </div>
+
+        <p className="text-xs text-slate-600 leading-relaxed">
+          {isRtl
+            ? 'يتم حفظ جميع فواتيرك وبيانات العملاء سحابياً في حسابك على Supabase. يمكنك مزامنة جميع البيانات الحالية فوراً أو نسخ كود SQL لإنشاء الجداول في لوحة سوبابيز.'
+            : 'All your invoices and customer records are saved to your Supabase cloud project. You can trigger an instant bulk sync or copy the database schema SQL.'}
+        </p>
+
+        {supabaseSyncStatus && (
+          <div className="p-3 bg-white border border-emerald-200 text-emerald-900 rounded-lg text-xs font-semibold flex items-center gap-2">
+            <Check className="w-4 h-4 text-emerald-600 shrink-0" />
+            <span>{supabaseSyncStatus}</span>
+          </div>
+        )}
+
+        <div className="flex flex-wrap items-center gap-2.5 pt-1">
+          <button
+            type="button"
+            onClick={handleSyncToSupabase}
+            disabled={isSupabaseSyncing}
+            className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 disabled:opacity-50 text-white rounded-lg text-xs font-bold inline-flex items-center gap-1.5 shadow-xs transition"
+          >
+            <Cloud className={`w-3.5 h-3.5 ${isSupabaseSyncing ? 'animate-bounce' : ''}`} />
+            <span>
+              {isSupabaseSyncing
+                ? (isRtl ? 'جاري المزامنة...' : 'Syncing...')
+                : (isRtl ? 'مزامنة جميع الفواتير إلى Supabase الآن' : 'Sync All Invoices to Supabase')}
+            </span>
+          </button>
+
+          <button
+            type="button"
+            onClick={handleCopySql}
+            className="px-3.5 py-2 bg-white hover:bg-slate-50 border border-slate-300 rounded-lg text-xs font-semibold text-slate-800 inline-flex items-center gap-1.5 shadow-2xs transition"
+          >
+            {isSqlCopied ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
+            <span>{isSqlCopied ? (isRtl ? 'تم نسخ كود الـ SQL!' : 'SQL Copied!') : (isRtl ? 'نسخ كود الـ SQL (إنشاء الجداول)' : 'Copy SQL Schema')}</span>
+          </button>
+
+          <a
+            href={`https://supabase.com/dashboard/project/${DEFAULT_SUPABASE_PROJECT_ID}/sql/new`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="px-3.5 py-2 bg-white hover:bg-slate-50 border border-slate-300 rounded-lg text-xs font-semibold text-slate-800 inline-flex items-center gap-1.5 shadow-2xs transition"
+          >
+            <span>{isRtl ? 'لوحة Supabase SQL Editor' : 'Open Supabase SQL Editor'}</span>
+            <ExternalLink className="w-3.5 h-3.5 text-slate-500" />
+          </a>
+        </div>
+      </div>
 
       {/* Data Backup, Import, and Reset Area */}
       <div className="bg-slate-100 p-5 rounded-xl border border-slate-200 space-y-3">

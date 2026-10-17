@@ -37,7 +37,11 @@ export interface CompanyProfile {
   whatsappAccessToken?: string;
   whatsappNoReplyMessage?: string;
   hidePhoneOnInvoice?: boolean;
+  enableInvoiceWatermark?: boolean;
+  watermarkType?: 'AUTO' | 'PAID' | 'DRAFT';
 }
+
+export type WatermarkType = 'AUTO' | 'PAID' | 'DRAFT';
 
 export interface Customer {
   id: string;

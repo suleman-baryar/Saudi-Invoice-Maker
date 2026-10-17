@@ -13,6 +13,8 @@ import { CompanySettings } from './components/CompanySettings';
 import { VatTestCasesModal } from './components/VatTestCasesModal';
 import { PrintPreviewModal } from './components/PrintPreviewModal';
 import { CustomerInvoiceView } from './components/CustomerInvoiceView';
+import { SupabaseSyncModal } from './components/SupabaseSyncModal';
+import { fetchInvoicesFromSupabase, fetchSingleInvoiceFromSupabase } from './utils/supabaseClient';
 
 const LANG_STORAGE_KEY = 'saudi_invoice_app_language';
 
@@ -40,6 +42,7 @@ export default function App() {
 
   // Modals
   const [isVatTestOpen, setIsVatTestOpen] = useState(false);
+  const [isSupabaseModalOpen, setIsSupabaseModalOpen] = useState(false);
 
   // Customer Public View Mode (when opened via link from WhatsApp / SMS)
   const [isCustomerPublicMode, setIsCustomerPublicMode] = useState<boolean>(() => {
@@ -68,7 +71,7 @@ export default function App() {
   const [customerLookupFailed, setCustomerLookupFailed] = useState(false);
   const [manualInvoiceInput, setManualInvoiceInput] = useState('');
 
-  // Bulk sync all stored invoices to server on launch so customer links always resolve
+  // Bulk sync all stored invoices to server on launch and pull cloud invoices from Supabase
   useEffect(() => {
     const list = storage.getInvoices();
     if (list.length > 0) {
@@ -78,9 +81,32 @@ export default function App() {
         body: JSON.stringify({ invoices: list }),
       }).catch(() => {});
     }
+
+    // Pull invoices from Supabase cloud database and merge with local storage
+    fetchInvoicesFromSupabase().then((res) => {
+      if (res.invoices && res.invoices.length > 0) {
+        const localList = storage.getInvoices();
+        const map = new Map<string, Invoice>();
+        localList.forEach((inv) => map.set(inv.id, inv));
+        let hasNew = false;
+        res.invoices.forEach((inv) => {
+          if (!map.has(inv.id)) {
+            map.set(inv.id, inv);
+            hasNew = true;
+          }
+        });
+        if (hasNew) {
+          const merged = Array.from(map.values()).sort(
+            (a, b) => new Date(b.issueDate).getTime() - new Date(a.issueDate).getTime()
+          );
+          storage.saveInvoices(merged);
+          setInvoices(merged);
+        }
+      }
+    }).catch(() => {});
   }, []);
 
-  // Fetch invoice from server if external customer opened link on their device
+  // Fetch invoice from Supabase or server if external customer opened link on their device
   useEffect(() => {
     if (!isCustomerPublicMode) return;
     const params = new URLSearchParams(window.location.search);
@@ -100,21 +126,42 @@ export default function App() {
       }
     }
 
-    // 2. Fetch from server/function if only ID or invoice number is provided
+    // 2. Fetch directly from Supabase (works on Netlify serverless static hosting) or server fallback
     const target = params.get('inv') || params.get('invoice') || params.get('id') || params.get('invoiceId');
     if (target && !publicViewInvoice) {
-      fetch(`/api/invoices/${encodeURIComponent(target)}`)
-        .then((res) => res.json())
-        .then((data) => {
-          if (data?.invoice) {
-            setPublicViewInvoice(data.invoice);
-          } else {
+      fetchSingleInvoiceFromSupabase(target).then((supaInv) => {
+        if (supaInv) {
+          setPublicViewInvoice(supaInv);
+          setCustomerLookupFailed(false);
+          return;
+        }
+        // Fall back to server endpoint
+        fetch(`/api/invoices/${encodeURIComponent(target)}`)
+          .then((res) => res.json())
+          .then((data) => {
+            if (data?.invoice) {
+              setPublicViewInvoice(data.invoice);
+            } else {
+              setCustomerLookupFailed(true);
+            }
+          })
+          .catch(() => {
             setCustomerLookupFailed(true);
-          }
-        })
-        .catch(() => {
-          setCustomerLookupFailed(true);
-        });
+          });
+      }).catch(() => {
+        fetch(`/api/invoices/${encodeURIComponent(target)}`)
+          .then((res) => res.json())
+          .then((data) => {
+            if (data?.invoice) {
+              setPublicViewInvoice(data.invoice);
+            } else {
+              setCustomerLookupFailed(true);
+            }
+          })
+          .catch(() => {
+            setCustomerLookupFailed(true);
+          });
+      });
     } else if (!target) {
       setCustomerLookupFailed(true);
     }
@@ -268,17 +315,39 @@ export default function App() {
                     setCustomerLookupFailed(false);
                     return;
                   }
-                  // Otherwise fetch from server
-                  fetch(`/api/invoices/${encodeURIComponent(target)}`)
-                    .then((res) => res.json())
-                    .then((data) => {
-                      if (data?.invoice) {
-                        setPublicViewInvoice(data.invoice);
-                        setCustomerLookupFailed(false);
-                      } else {
+                  // Check Supabase cloud database
+                  fetchSingleInvoiceFromSupabase(target).then((supaInv) => {
+                    if (supaInv) {
+                      setPublicViewInvoice(supaInv);
+                      setCustomerLookupFailed(false);
+                      return;
+                    }
+                    // Otherwise fetch from server
+                    fetch(`/api/invoices/${encodeURIComponent(target)}`)
+                      .then((res) => res.json())
+                      .then((data) => {
+                        if (data?.invoice) {
+                          setPublicViewInvoice(data.invoice);
+                          setCustomerLookupFailed(false);
+                        } else {
+                          alert(lang === 'ar' ? 'لم يتم العثور على الفاتورة' : 'Invoice not found');
+                        }
+                      })
+                      .catch(() => {
                         alert(lang === 'ar' ? 'لم يتم العثور على الفاتورة' : 'Invoice not found');
-                      }
-                    });
+                      });
+                  }).catch(() => {
+                    fetch(`/api/invoices/${encodeURIComponent(target)}`)
+                      .then((res) => res.json())
+                      .then((data) => {
+                        if (data?.invoice) {
+                          setPublicViewInvoice(data.invoice);
+                          setCustomerLookupFailed(false);
+                        } else {
+                          alert(lang === 'ar' ? 'لم يتم العثور على الفاتورة' : 'Invoice not found');
+                        }
+                      });
+                  });
                 }}
                 className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-xl transition"
               >
@@ -338,6 +407,7 @@ export default function App() {
         onSelectTab={setActiveTab}
         company={company}
         onOpenVatTests={() => setIsVatTestOpen(true)}
+        onOpenSupabase={() => setIsSupabaseModalOpen(true)}
         lang={lang}
         onToggleLanguage={handleToggleLanguage}
       />
@@ -351,6 +421,7 @@ export default function App() {
             onViewInvoice={handleViewInvoice}
             onEditInvoice={handleEditInvoice}
             onOpenVatTests={() => setIsVatTestOpen(true)}
+            onOpenSupabase={() => setIsSupabaseModalOpen(true)}
             lang={lang}
             onPrintInvoice={handleOpenPrintPreview}
           />
@@ -445,6 +516,20 @@ export default function App() {
         onEdit={(inv) => {
           handleClosePrintPreview();
           handleEditInvoice(inv);
+        }}
+      />
+
+      {/* Supabase Cloud Database Management & Sync Modal */}
+      <SupabaseSyncModal
+        isOpen={isSupabaseModalOpen}
+        onClose={() => setIsSupabaseModalOpen(false)}
+        lang={lang}
+        invoices={invoices}
+        onInvoicesSynced={(updated) => {
+          setInvoices(updated);
+          if (updated.length > 0 && !currentInvoice) {
+            setCurrentInvoice(updated[0]);
+          }
         }}
       />
     </div>

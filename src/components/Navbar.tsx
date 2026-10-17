@@ -11,6 +11,8 @@ import {
   Menu,
   X,
   Globe,
+  Database,
+  Cloud,
 } from 'lucide-react';
 import { CompanyProfile } from '../types';
 import { Language, translations } from '../utils/translations';
@@ -29,6 +31,7 @@ interface NavbarProps {
   onSelectTab: (tab: NavTab) => void;
   company: CompanyProfile;
   onOpenVatTests: () => void;
+  onOpenSupabase: () => void;
   lang: Language;
   onToggleLanguage: (nextLang: Language) => void;
 }
@@ -38,6 +41,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   onSelectTab,
   company,
   onOpenVatTests,
+  onOpenSupabase,
   lang,
   onToggleLanguage,
 }) => {
@@ -135,6 +139,18 @@ export const Navbar: React.FC<NavbarProps> = ({
                 <span>{t.switchLang}</span>
               </button>
 
+              {/* Supabase Cloud Database Button */}
+              <button
+                type="button"
+                onClick={onOpenSupabase}
+                title={isRtl ? 'قاعدة بيانات Supabase السحابية' : 'Supabase Cloud Database'}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-lg border border-emerald-300 bg-emerald-50 hover:bg-emerald-100 text-emerald-900 transition shadow-2xs"
+              >
+                <Database className="w-3.5 h-3.5 text-emerald-700" />
+                <span className="hidden sm:inline">{isRtl ? 'سوبابيز' : 'Supabase'}</span>
+                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+              </button>
+
               <button
                 type="button"
                 onClick={onOpenVatTests}
@@ -189,6 +205,19 @@ export const Navbar: React.FC<NavbarProps> = ({
               );
             })}
             <div className="pt-2 border-t border-slate-100 flex flex-col gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  onOpenSupabase();
+                  setMobileMenuOpen(false);
+                }}
+                className="w-full p-2.5 text-center text-xs font-bold text-emerald-950 bg-emerald-50 border border-emerald-200 rounded-lg flex items-center justify-center gap-2"
+              >
+                <Database className="w-4 h-4 text-emerald-700" />
+                <span>{isRtl ? 'قاعدة بيانات Supabase السحابية' : 'Supabase Cloud Database'}</span>
+                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+              </button>
+
               <button
                 type="button"
                 onClick={() => {

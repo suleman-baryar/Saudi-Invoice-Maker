@@ -15,6 +15,7 @@ import {
   Calculator,
   Printer,
   Smartphone,
+  Database,
 } from 'lucide-react';
 import { WhatsAppIcon } from './WhatsAppIcon';
 import { WhatsAppShareModal } from './WhatsAppShareModal';
@@ -26,6 +27,7 @@ interface DashboardProps {
   onViewInvoice: (invoice: Invoice) => void;
   onEditInvoice: (invoice: Invoice) => void;
   onOpenVatTests: () => void;
+  onOpenSupabase?: () => void;
   lang: Language;
   onPrintInvoice?: (invoice: Invoice) => void;
 }
@@ -36,6 +38,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
   onViewInvoice,
   onEditInvoice,
   onOpenVatTests,
+  onOpenSupabase,
   lang,
   onPrintInvoice,
 }) => {
@@ -105,6 +108,18 @@ export const Dashboard: React.FC<DashboardProps> = ({
         </div>
 
         <div className="flex items-center flex-wrap gap-2.5">
+          {onOpenSupabase && (
+            <button
+              type="button"
+              onClick={onOpenSupabase}
+              className="px-3.5 py-2 bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-200 rounded-xl text-xs font-bold backdrop-blur-xs transition inline-flex items-center gap-1.5 border border-emerald-400/30 shadow-xs"
+            >
+              <Database className="w-4 h-4 text-emerald-400" />
+              <span>{isRtl ? 'سوبابيز السحابي' : 'Supabase Cloud'}</span>
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+            </button>
+          )}
+
           <button
             type="button"
             onClick={onOpenVatTests}

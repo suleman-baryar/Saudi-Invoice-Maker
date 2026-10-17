@@ -1,4 +1,5 @@
 import { CompanyProfile, Customer, Product, Invoice, InvoiceItem, PricingMode, PaymentMethod, PaymentStatus } from '../types';
+import { saveInvoiceToSupabase, deleteInvoiceFromSupabase } from './supabaseClient';
 
 const STORAGE_KEYS = {
   COMPANY: 'saudi_invoice_company_profile',
@@ -55,6 +56,8 @@ export const DEFAULT_COMPANY: CompanyProfile = {
   whatsappBusinessName: 'مركز الملك للدهانات',
   whatsappNoReplyMessage: 'هذا الحساب مخصص لإرسال الفواتير بصيغة PDF آلياً فقط (No-Reply) ولا يستقبل الردود.',
   hidePhoneOnInvoice: false,
+  enableInvoiceWatermark: true,
+  watermarkType: 'AUTO',
 };
 
 // Known demo IDs and predicates to strictly identify dummy sample entries
@@ -334,23 +337,29 @@ class AppStorage {
   saveInvoice(invoice: Invoice): Invoice {
     const list = this.getInvoices();
     const existingIdx = list.findIndex((i) => i.id === invoice.id);
+    let updatedInv: Invoice;
     if (existingIdx >= 0) {
-      list[existingIdx] = { ...invoice, updatedAt: new Date().toISOString() };
+      updatedInv = { ...invoice, updatedAt: new Date().toISOString() };
+      list[existingIdx] = updatedInv;
     } else {
-      list.unshift({ ...invoice, createdAt: invoice.createdAt || new Date().toISOString(), updatedAt: new Date().toISOString() });
+      updatedInv = { ...invoice, createdAt: invoice.createdAt || new Date().toISOString(), updatedAt: new Date().toISOString() };
+      list.unshift(updatedInv);
     }
     this.saveInvoices(list);
 
-    // Asynchronously sync to server so customer links are immediately accessible on mobile/WhatsApp
+    // Asynchronously save to Supabase cloud database
+    saveInvoiceToSupabase(updatedInv).catch(() => {});
+
+    // Asynchronously sync to local server cache so customer links are immediately accessible
     if (typeof fetch !== 'undefined') {
       fetch('/api/invoices/publish', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ invoice }),
+        body: JSON.stringify({ invoice: updatedInv }),
       }).catch(() => {});
     }
 
-    return invoice;
+    return updatedInv;
   }
 
   deleteInvoice(id: string): boolean {
@@ -358,6 +367,7 @@ class AppStorage {
     const filtered = list.filter((i) => i.id !== id);
     if (filtered.length !== list.length) {
       this.saveInvoices(filtered);
+      deleteInvoiceFromSupabase(id).catch(() => {});
       return true;
     }
     return false;
@@ -379,6 +389,7 @@ class AppStorage {
     inv.updatedAt = new Date().toISOString();
     list[idx] = inv;
     this.saveInvoices(list);
+    saveInvoiceToSupabase(inv).catch(() => {});
     return inv;
   }
 

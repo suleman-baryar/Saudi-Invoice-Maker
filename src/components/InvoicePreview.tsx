@@ -19,9 +19,11 @@ import {
   ZoomIn,
   ZoomOut,
   Camera,
+  Stamp,
 } from 'lucide-react';
 import { downloadInvoicePdf, printInvoice, shareInvoice, captureInvoiceScreenshot } from '../utils/pdfGenerator';
 import { Language, translations } from '../utils/translations';
+import { storage } from '../utils/storage';
 
 interface InvoicePreviewProps {
   invoice: Invoice;
@@ -60,6 +62,87 @@ export const InvoicePreview: React.FC<InvoicePreviewProps> = ({
   const t = translations[lang].preview;
   const isRtl = lang === 'ar';
   const { company, customer, items } = invoice;
+
+  // Resolve effective company watermark settings
+  const currentCompany = storage.getCompany();
+  const effectiveCompany = {
+    ...currentCompany,
+    ...(company || {}),
+    enableInvoiceWatermark:
+      currentCompany.enableInvoiceWatermark ??
+      company?.enableInvoiceWatermark ??
+      true,
+    watermarkType:
+      currentCompany.watermarkType ||
+      company?.watermarkType ||
+      'AUTO',
+  };
+
+  const [watermarkOverride, setWatermarkOverride] = useState<boolean | null>(null);
+  const isWatermarkActive =
+    watermarkOverride !== null ? watermarkOverride : !!effectiveCompany.enableInvoiceWatermark;
+  const activeWatermarkType = effectiveCompany.watermarkType || 'AUTO';
+
+  const getWatermarkDetails = () => {
+    if (!isWatermarkActive) {
+      return { show: false, type: 'NONE' as const, textAr: '', textEn: '', subtext: '' };
+    }
+
+    if (activeWatermarkType === 'PAID') {
+      return {
+        show: true,
+        type: 'PAID' as const,
+        textAr: 'مـدفـوعـة',
+        textEn: 'PAID IN FULL',
+        subtext: 'ZATCA TAX INVOICE',
+      };
+    }
+
+    if (activeWatermarkType === 'DRAFT') {
+      return {
+        show: true,
+        type: 'DRAFT' as const,
+        textAr: 'مـسـودة',
+        textEn: 'DRAFT - NOT OFFICIAL',
+        subtext: 'FOR REVIEW ONLY',
+      };
+    }
+
+    // AUTO: Determine by invoice paymentStatus and status
+    if (invoice.paymentStatus === 'PAID') {
+      return {
+        show: true,
+        type: 'PAID' as const,
+        textAr: 'مـدفـوعـة',
+        textEn: 'PAID IN FULL',
+        subtext: 'ZATCA TAX INVOICE',
+      };
+    }
+
+    if (invoice.status === 'DRAFT') {
+      return {
+        show: true,
+        type: 'DRAFT' as const,
+        textAr: 'مـسـودة',
+        textEn: 'DRAFT - NOT OFFICIAL',
+        subtext: 'FOR REVIEW ONLY',
+      };
+    }
+
+    if (invoice.status === 'CANCELLED') {
+      return {
+        show: true,
+        type: 'DRAFT' as const,
+        textAr: 'مـلـغـاة',
+        textEn: 'CANCELLED',
+        subtext: 'VOID INVOICE',
+      };
+    }
+
+    return { show: false, type: 'NONE' as const, textAr: '', textEn: '', subtext: '' };
+  };
+
+  const watermark = getWatermarkDetails();
 
   const A4_SHEET_WIDTH = 794; // Standard A4 pixel width at 96 DPI
 
@@ -221,6 +304,27 @@ export const InvoicePreview: React.FC<InvoicePreviewProps> = ({
               className="px-3 py-1.5 text-xs font-medium bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 rounded-lg transition"
             >
               {t.checkZatcaBtn}
+            </button>
+
+            {/* Quick Watermark Toggle */}
+            <button
+              type="button"
+              onClick={() => {
+                setWatermarkOverride(!isWatermarkActive);
+              }}
+              title={isRtl ? 'تبديل إظهار الختم المائي (مدفوعة / مسودة) على الفاتورة وملف الـ PDF' : 'Toggle Watermark on Invoice & PDF'}
+              className={`px-3 py-1.5 text-xs font-bold rounded-lg border transition inline-flex items-center gap-1.5 ${
+                watermark.show
+                  ? 'bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border-indigo-200'
+                  : 'bg-slate-100 hover:bg-slate-200 text-slate-500 border-slate-200'
+              }`}
+            >
+              <Stamp className="w-3.5 h-3.5 text-indigo-600" />
+              <span>
+                {watermark.show
+                  ? (isRtl ? `ختم مائي: ${watermark.textAr}` : `Watermark: ${watermark.textEn}`)
+                  : (isRtl ? 'الختم المائي: معطل' : 'Watermark: Off')}
+              </span>
             </button>
 
             <button
@@ -432,7 +536,7 @@ export const InvoicePreview: React.FC<InvoicePreviewProps> = ({
           <div
             ref={sheetRef}
             id={containerId}
-            className="print-invoice-sheet bg-white border border-slate-300 shadow-md p-6 sm:p-8 rounded-sm text-slate-900"
+            className="print-invoice-sheet bg-white border border-slate-300 shadow-md p-6 sm:p-8 rounded-sm text-slate-900 relative overflow-hidden"
             style={{
               width: `${A4_SHEET_WIDTH}px`,
               minHeight: '1120px',
@@ -443,6 +547,41 @@ export const InvoicePreview: React.FC<InvoicePreviewProps> = ({
               left: 0,
             }}
           >
+          {/* Watermark Stamp Overlay (Paid / Draft) - Captured in Canvas & PDF */}
+          {watermark.show && (
+            <div
+              className="pointer-events-none select-none absolute inset-x-0 z-20 flex items-center justify-center overflow-hidden"
+              style={{
+                top: '48%',
+                transform: 'translateY(-50%)',
+              }}
+            >
+              <div
+                className={`transform -rotate-25 rounded-3xl border-6 border-dashed px-14 py-6 text-center shadow-2xs select-none backdrop-blur-[0.5px] ${
+                  watermark.type === 'PAID'
+                    ? 'border-emerald-600/35 bg-emerald-500/5 text-emerald-700/35'
+                    : 'border-slate-500/30 bg-slate-500/5 text-slate-600/30'
+                }`}
+                style={{
+                  letterSpacing: '0.15em',
+                  minWidth: '400px',
+                }}
+              >
+                <div className="font-black text-6xl leading-tight font-sans" dir="rtl">
+                  {watermark.textAr}
+                </div>
+                <div className="font-extrabold text-2xl tracking-widest uppercase mt-1 font-mono">
+                  {watermark.textEn}
+                </div>
+                {watermark.subtext && (
+                  <div className="text-[10px] font-bold tracking-widest uppercase mt-1 text-slate-500/30 font-mono">
+                    {watermark.subtext}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
           {/* TOP SECTION: Header with Dual Language Branding */}
           <div className="border-b-2 border-slate-800 pb-4 mb-4">
             <div className="grid grid-cols-12 gap-3 items-center">
