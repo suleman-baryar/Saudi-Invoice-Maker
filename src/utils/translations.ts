@@ -15,7 +15,7 @@ export const translations = {
       customers: 'العملاء',
       products: 'المنتجات',
       companySettings: 'إعدادات المنشأة',
-      vatTests: 'اختبارات الضريبة 15%',
+      vatTests: 'ضريبة 15% (Vat 15%)',
       newInvoiceBtn: '+ فاتورة جديدة',
     },
 
@@ -322,7 +322,7 @@ export const translations = {
       customers: 'Customers',
       products: 'Products',
       companySettings: 'Company Profile',
-      vatTests: '15% VAT Test Suite',
+      vatTests: 'Vat 15%',
       newInvoiceBtn: '+ New Invoice',
     },
 

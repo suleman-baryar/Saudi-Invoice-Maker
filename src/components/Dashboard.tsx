@@ -124,9 +124,10 @@ export const Dashboard: React.FC<DashboardProps> = ({
             type="button"
             onClick={onOpenVatTests}
             className="px-3.5 py-2 bg-white/10 hover:bg-white/20 text-white rounded-xl text-xs font-semibold backdrop-blur-xs transition inline-flex items-center gap-1.5 border border-white/10"
+            title="Vat 15%"
           >
             <Calculator className="w-4 h-4 text-amber-300" />
-            {translations[lang].nav.vatTests}
+            <span>Vat 15%</span>
           </button>
 
           <button
