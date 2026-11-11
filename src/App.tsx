@@ -1,6 +1,14 @@
 import React, { useState, useEffect } from 'react';
-import { Invoice, CompanyProfile, Customer, InvoiceItem, PricingMode } from './types';
-import { storage } from './utils/storage';
+import {
+  Invoice,
+  CompanyProfile,
+  Customer,
+  InvoiceItem,
+  PricingMode,
+  PurchaseInvoice,
+  Supplier,
+} from './types';
+import { storage, isDemoInvoice } from './utils/storage';
 import { Language } from './utils/translations';
 import { Navbar, NavTab } from './components/Navbar';
 import { Dashboard } from './components/Dashboard';
@@ -14,6 +22,13 @@ import { VatTestCasesModal } from './components/VatTestCasesModal';
 import { PrintPreviewModal } from './components/PrintPreviewModal';
 import { CustomerInvoiceView } from './components/CustomerInvoiceView';
 import { SupabaseSyncModal } from './components/SupabaseSyncModal';
+import { PurchaseInvoiceEditor } from './components/PurchaseInvoiceEditor';
+import { PurchaseInvoicePreview } from './components/PurchaseInvoicePreview';
+import { PurchaseHistory } from './components/PurchaseHistory';
+import { SupplierManager } from './components/SupplierManager';
+import { ReportsView } from './components/ReportsView';
+import { PwaInstallBanner } from './components/PwaInstallBanner';
+import { PlayStoreGuideModal } from './components/PlayStoreGuideModal';
 import { fetchInvoicesFromSupabase, fetchSingleInvoiceFromSupabase } from './utils/supabaseClient';
 
 const LANG_STORAGE_KEY = 'saudi_invoice_app_language';
@@ -37,12 +52,24 @@ export default function App() {
   // Invoice being edited
   const [editingInvoice, setEditingInvoice] = useState<Invoice | null>(null);
 
+  // Purchase Invoices State
+  const [purchaseInvoices, setPurchaseInvoices] = useState<PurchaseInvoice[]>(() =>
+    storage.getPurchaseInvoices()
+  );
+  const [currentPurchaseInvoice, setCurrentPurchaseInvoice] = useState<PurchaseInvoice | null>(() => {
+    const pList = storage.getPurchaseInvoices();
+    return pList.length > 0 ? pList[0] : null;
+  });
+  const [editingPurchaseInvoice, setEditingPurchaseInvoice] = useState<PurchaseInvoice | null>(null);
+
   // Print Preview Modal State
   const [printPreviewInvoice, setPrintPreviewInvoice] = useState<Invoice | null>(null);
 
   // Modals
   const [isVatTestOpen, setIsVatTestOpen] = useState(false);
   const [isSupabaseModalOpen, setIsSupabaseModalOpen] = useState(false);
+  const [isInstallModalOpen, setIsInstallModalOpen] = useState(false);
+  const [isPlayStoreModalOpen, setIsPlayStoreModalOpen] = useState(false);
 
   // Customer Public View Mode (when opened via link from WhatsApp / SMS)
   const [isCustomerPublicMode, setIsCustomerPublicMode] = useState<boolean>(() => {
@@ -90,7 +117,7 @@ export default function App() {
         localList.forEach((inv) => map.set(inv.id, inv));
         let hasNew = false;
         res.invoices.forEach((inv) => {
-          if (!map.has(inv.id)) {
+          if (!isDemoInvoice(inv) && !map.has(inv.id)) {
             map.set(inv.id, inv);
             hasNew = true;
           }
@@ -180,10 +207,11 @@ export default function App() {
 
   const refreshData = () => {
     setInvoices(storage.getInvoices());
+    setPurchaseInvoices(storage.getPurchaseInvoices());
     setCompany(storage.getCompany());
   };
 
-  // Nav Handlers
+  // Nav Handlers - Sales
   const handleNewInvoice = () => {
     setEditingInvoice(null);
     setActiveTab('CREATE_INVOICE');
@@ -234,6 +262,78 @@ export default function App() {
   const handlePreviewFromEditor = (draft: Invoice) => {
     setCurrentInvoice(draft);
     setActiveTab('VIEW_INVOICE');
+  };
+
+  const handleDeleteInvoice = (inv: Invoice) => {
+    storage.deleteInvoice(inv.id);
+    refreshData();
+    const remaining = storage.getInvoices();
+    setCurrentInvoice(remaining.length > 0 ? remaining[0] : null);
+    if (activeTab === 'VIEW_INVOICE' || activeTab === 'CREATE_INVOICE') {
+      setActiveTab('INVOICE_HISTORY');
+    }
+  };
+
+  // Nav Handlers - Purchases
+  const handleNewPurchaseInvoice = () => {
+    setEditingPurchaseInvoice(null);
+    setActiveTab('CREATE_PURCHASE_INVOICE');
+  };
+
+  const handleEditPurchaseInvoice = (inv: PurchaseInvoice) => {
+    setEditingPurchaseInvoice(inv);
+    setActiveTab('CREATE_PURCHASE_INVOICE');
+  };
+
+  const handleViewPurchaseInvoice = (inv: PurchaseInvoice) => {
+    setCurrentPurchaseInvoice(inv);
+    setActiveTab('VIEW_PURCHASE_INVOICE');
+  };
+
+  const handleDuplicatePurchaseInvoice = (inv: PurchaseInvoice) => {
+    const nextNum = storage.getNextPurchaseInvoiceNumber();
+    const duplicated: PurchaseInvoice = {
+      ...inv,
+      id: 'pinv_' + Date.now(),
+      invoiceNumber: nextNum,
+      supplierInvoiceNumber: '',
+      issueDate: new Date().toISOString().split('T')[0],
+      status: 'DRAFT',
+      amountPaid: 0,
+      remainingBalance: inv.grandTotal,
+      payments: [],
+      paymentStatus: 'UNPAID',
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+    setEditingPurchaseInvoice(duplicated);
+    setActiveTab('CREATE_PURCHASE_INVOICE');
+  };
+
+  const handleSavePurchaseInvoiceSuccess = (saved: PurchaseInvoice) => {
+    refreshData();
+    setCurrentPurchaseInvoice(saved);
+    setActiveTab('VIEW_PURCHASE_INVOICE');
+  };
+
+  const handlePreviewFromPurchaseEditor = (draft: PurchaseInvoice) => {
+    setCurrentPurchaseInvoice(draft);
+    setActiveTab('VIEW_PURCHASE_INVOICE');
+  };
+
+  const handleSupplierSelectForPurchase = (supplierId: string) => {
+    const suppliers = storage.getSuppliers();
+    const found = suppliers.find((s) => s.id === supplierId);
+    if (found) {
+      const nextNum = storage.getNextPurchaseInvoiceNumber();
+      const newPurchase: Partial<PurchaseInvoice> = {
+        invoiceNumber: nextNum,
+        supplier: found,
+        items: [],
+      };
+      setEditingPurchaseInvoice(newPurchase as PurchaseInvoice);
+      setActiveTab('CREATE_PURCHASE_INVOICE');
+    }
   };
 
   const handleCustomerSelectForInvoice = (cust: Customer) => {
@@ -400,7 +500,14 @@ export default function App() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-900 flex flex-col pb-16 lg:pb-8 font-sans">
+    <div className="min-h-screen bg-slate-50 text-slate-900 flex flex-col pb-20 lg:pb-8 font-sans">
+      {/* PWA Mobile Installation Prompt Banner */}
+      <PwaInstallBanner
+        lang={lang}
+        forceOpenModal={isInstallModalOpen}
+        onCloseModal={() => setIsInstallModalOpen(false)}
+      />
+
       {/* Navigation Bar */}
       <Navbar
         activeTab={activeTab}
@@ -410,23 +517,33 @@ export default function App() {
         onOpenSupabase={() => setIsSupabaseModalOpen(true)}
         lang={lang}
         onToggleLanguage={handleToggleLanguage}
+        onOpenInstallModal={() => setIsInstallModalOpen(true)}
+        onOpenPlayStoreModal={() => setIsPlayStoreModalOpen(true)}
       />
 
       {/* Main Content Area */}
-      <main className="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6 lg:p-8">
+      <main className="flex-1 max-w-7xl w-full mx-auto p-3 sm:p-6 lg:p-8">
         {activeTab === 'DASHBOARD' && (
           <Dashboard
             invoices={invoices}
             onNewInvoice={handleNewInvoice}
             onViewInvoice={handleViewInvoice}
             onEditInvoice={handleEditInvoice}
+            onDeleteInvoice={handleDeleteInvoice}
             onOpenVatTests={() => setIsVatTestOpen(true)}
             onOpenSupabase={() => setIsSupabaseModalOpen(true)}
             lang={lang}
             onPrintInvoice={handleOpenPrintPreview}
+            onNewPurchaseInvoice={handleNewPurchaseInvoice}
+            onViewPurchaseInvoice={handleViewPurchaseInvoice}
+            onManageSuppliers={() => setActiveTab('SUPPLIERS')}
+            onOpenReports={() => setActiveTab('REPORTS')}
+            onOpenInstallModal={() => setIsInstallModalOpen(true)}
+            onOpenPlayStoreModal={() => setIsPlayStoreModalOpen(true)}
           />
         )}
 
+        {/* ================= SALES TABS ================= */}
         {activeTab === 'CREATE_INVOICE' && (
           <InvoiceEditor
             initialInvoice={editingInvoice}
@@ -434,6 +551,7 @@ export default function App() {
             onCancel={() => setActiveTab('INVOICE_HISTORY')}
             onPreview={handlePreviewFromEditor}
             onPrintPreview={handleOpenPrintPreview}
+            onDelete={handleDeleteInvoice}
             lang={lang}
           />
         )}
@@ -443,23 +561,26 @@ export default function App() {
             <InvoicePreview
               invoice={currentInvoice}
               onEdit={() => handleEditInvoice(currentInvoice)}
+              onDelete={() => handleDeleteInvoice(currentInvoice)}
               lang={lang}
               onPrint={() => handleOpenPrintPreview(currentInvoice)}
             />
           ) : (
-            <div className="bg-white p-12 text-center rounded-xl border border-slate-200 shadow-xs max-w-md mx-auto my-8">
+            <div className="bg-white p-12 text-center rounded-2xl border border-slate-200 shadow-xs max-w-md mx-auto my-8">
               <h3 className="font-bold text-slate-800 text-base mb-2">
-                {lang === 'ar' ? 'لا توجد فاتورة محددة للعرض' : 'No Invoice Selected'}
+                {lang === 'ar' ? 'لا توجد فاتورة مبيعات محددة للعرض' : 'No Sales Invoice Selected'}
               </h3>
               <p className="text-xs text-slate-500 mb-4">
-                {lang === 'ar' ? 'قم بإنشاء فاتورة جديدة للبدء في المعاينة والطباعة.' : 'Create a new invoice to preview, print or download.'}
+                {lang === 'ar'
+                  ? 'قم بإنشاء فاتورة مبيعات جديدة للبدء في المعاينة والطباعة.'
+                  : 'Create a new invoice to preview, print or download.'}
               </p>
               <button
                 type="button"
                 onClick={handleNewInvoice}
-                className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-bold transition"
+                className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold transition shadow-xs"
               >
-                {lang === 'ar' ? '+ إنشاء فاتورة جديدة' : '+ Create New Invoice'}
+                {lang === 'ar' ? '+ إنشاء فاتورة مبيعات جديدة' : '+ Create Sales Invoice'}
               </button>
             </div>
           )
@@ -485,8 +606,71 @@ export default function App() {
           />
         )}
 
+        {/* ================= PURCHASE TABS ================= */}
+        {activeTab === 'CREATE_PURCHASE_INVOICE' && (
+          <PurchaseInvoiceEditor
+            initialInvoice={editingPurchaseInvoice}
+            onSaveSuccess={handleSavePurchaseInvoiceSuccess}
+            onCancel={() => setActiveTab('PURCHASE_HISTORY')}
+            onPreview={handlePreviewFromPurchaseEditor}
+            lang={lang}
+          />
+        )}
+
+        {activeTab === 'VIEW_PURCHASE_INVOICE' && (
+          currentPurchaseInvoice ? (
+            <PurchaseInvoicePreview
+              invoice={currentPurchaseInvoice}
+              onEdit={() => handleEditPurchaseInvoice(currentPurchaseInvoice)}
+              onBack={() => setActiveTab('PURCHASE_HISTORY')}
+              lang={lang}
+            />
+          ) : (
+            <div className="bg-white p-12 text-center rounded-2xl border border-slate-200 shadow-xs max-w-md mx-auto my-8">
+              <h3 className="font-bold text-slate-800 text-base mb-2">
+                {lang === 'ar' ? 'لا توجد فاتورة مشتريات محددة للعرض' : 'No Purchase Invoice Selected'}
+              </h3>
+              <p className="text-xs text-slate-500 mb-4">
+                {lang === 'ar'
+                  ? 'قم بتسجيل فاتورة مشتريات جديدة من المورد للبدء في المعاينة والطباعة.'
+                  : 'Record a new purchase invoice from supplier to preview and print.'}
+              </p>
+              <button
+                type="button"
+                onClick={handleNewPurchaseInvoice}
+                className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition shadow-xs"
+              >
+                {lang === 'ar' ? '+ تسجيل فاتورة مشتريات' : '+ New Purchase Invoice'}
+              </button>
+            </div>
+          )
+        )}
+
+        {activeTab === 'PURCHASE_HISTORY' && (
+          <PurchaseHistory
+            onNewInvoice={handleNewPurchaseInvoice}
+            onViewInvoice={handleViewPurchaseInvoice}
+            onEditInvoice={handleEditPurchaseInvoice}
+            lang={lang}
+          />
+        )}
+
+        {activeTab === 'SUPPLIERS' && (
+          <SupplierManager
+            onNewPurchaseForSupplier={handleSupplierSelectForPurchase}
+            lang={lang}
+          />
+        )}
+
+        {/* ================= SHOP INVENTORY & ANALYTICS ================= */}
         {activeTab === 'PRODUCTS' && (
           <ProductManager
+            lang={lang}
+          />
+        )}
+
+        {activeTab === 'REPORTS' && (
+          <ReportsView
             lang={lang}
           />
         )}
@@ -531,6 +715,13 @@ export default function App() {
             setCurrentInvoice(updated[0]);
           }
         }}
+      />
+
+      {/* Google Play Store Publishing Guide Modal */}
+      <PlayStoreGuideModal
+        isOpen={isPlayStoreModalOpen}
+        onClose={() => setIsPlayStoreModalOpen(false)}
+        lang={lang}
       />
     </div>
   );

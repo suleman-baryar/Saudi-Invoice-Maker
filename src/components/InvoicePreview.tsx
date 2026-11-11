@@ -20,6 +20,8 @@ import {
   ZoomOut,
   Camera,
   Stamp,
+  Trash2,
+  X,
 } from 'lucide-react';
 import { downloadInvoicePdf, printInvoice, shareInvoice, captureInvoiceScreenshot } from '../utils/pdfGenerator';
 import { Language, translations } from '../utils/translations';
@@ -28,6 +30,7 @@ import { storage } from '../utils/storage';
 interface InvoicePreviewProps {
   invoice: Invoice;
   onEdit?: () => void;
+  onDelete?: () => void;
   showToolbar?: boolean;
   showZoomBar?: boolean;
   lang?: Language;
@@ -39,6 +42,7 @@ interface InvoicePreviewProps {
 export const InvoicePreview: React.FC<InvoicePreviewProps> = ({
   invoice,
   onEdit,
+  onDelete,
   showToolbar = true,
   showZoomBar = true,
   lang = 'ar',
@@ -49,6 +53,7 @@ export const InvoicePreview: React.FC<InvoicePreviewProps> = ({
   const [isZatcaModalOpen, setIsZatcaModalOpen] = useState(false);
   const [isSmsModalOpen, setIsSmsModalOpen] = useState(false);
   const [isWhatsAppModalOpen, setIsWhatsAppModalOpen] = useState(false);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
   const [isCapturingScreenshot, setIsCapturingScreenshot] = useState(false);
   const [screenshotSuccess, setScreenshotSuccess] = useState(false);
@@ -182,7 +187,11 @@ export const InvoicePreview: React.FC<InvoicePreviewProps> = ({
   // Compute scale
   // Available width accounting for minimal margins
   const availableWidth = Math.max(280, containerWidth - 16);
-  const autoFitScale = Math.min(1, Math.max(0.28, Number((availableWidth / A4_SHEET_WIDTH).toFixed(3))));
+  // On mobile screens (<640px), keep minimum scale at 0.75 so all fields and texts remain sharp and readable
+  const isSmallMobile = containerWidth < 640;
+  const autoFitScale = isSmallMobile
+    ? Math.max(0.75, Math.min(1, Number((availableWidth / A4_SHEET_WIDTH).toFixed(3))))
+    : Math.min(1, Math.max(0.5, Number((availableWidth / A4_SHEET_WIDTH).toFixed(3))));
 
   let currentScale = 1;
   if (zoomMode === 'fit') {
@@ -298,6 +307,18 @@ export const InvoicePreview: React.FC<InvoicePreviewProps> = ({
               </button>
             )}
 
+            {onDelete && (
+              <button
+                type="button"
+                onClick={() => setShowDeleteModal(true)}
+                className="px-3.5 py-1.5 text-xs font-bold bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-lg transition inline-flex items-center gap-1.5 shadow-xs"
+                title={isRtl ? 'حذف هذه الفاتورة نهائياً' : 'Delete this invoice'}
+              >
+                <Trash2 className="w-3.5 h-3.5 text-rose-600" />
+                <span>{isRtl ? 'حذف الفاتورة' : 'Delete Invoice'}</span>
+              </button>
+            )}
+
             <button
               type="button"
               onClick={() => setIsZatcaModalOpen(true)}
@@ -369,10 +390,10 @@ export const InvoicePreview: React.FC<InvoicePreviewProps> = ({
               type="button"
               onClick={() => setIsWhatsAppModalOpen(true)}
               className="px-3.5 py-1.5 text-xs font-bold bg-[#25D366] hover:bg-[#20ba59] active:bg-[#1caa4f] text-white rounded-lg transition inline-flex items-center gap-1.5 shadow-xs"
-              title={isRtl ? 'إرسال الفاتورة عبر واتساب إلى رقم العميل المكتوب في الفاتورة' : 'Send invoice via WhatsApp to customer number'}
+              title={isRtl ? 'إرسال الفاتورة كمستند PDF عبر Meta WhatsApp Business API' : 'Send invoice PDF as document via Meta WhatsApp Business API'}
             >
               <WhatsAppIcon className="w-4 h-4 text-white" />
-              <span>{t.sendWhatsAppBtn}</span>
+              <span>{isRtl ? 'إرسال عبر واتساب (Meta API)' : 'Send via WhatsApp'}</span>
             </button>
 
             <button
@@ -649,32 +670,32 @@ export const InvoicePreview: React.FC<InvoicePreviewProps> = ({
           </div>
 
           {/* METADATA STRIP & CODES: Invoice Info + Barcode + ZATCA QR Code */}
-          <div className="grid grid-cols-12 gap-3 p-3 bg-slate-50 rounded-lg border border-slate-200 mb-4 items-center">
+          <div className="grid grid-cols-12 gap-3 p-4 bg-slate-50/90 rounded-xl border border-slate-300 mb-4 items-center">
             {/* QR Code Column */}
             <div className="col-span-3 flex flex-col items-center justify-center">
               <InvoiceQrCode
                 value={invoice.zatcaQrBase64 || ''}
-                size={110}
+                size={120}
                 onInspect={() => setIsZatcaModalOpen(true)}
                 showInspectButton={true}
               />
-              <span className="text-[9px] text-slate-500 mt-1 font-mono text-center">
+              <span className="text-[10px] text-slate-600 mt-1 font-mono font-bold text-center">
                 ZATCA E-Invoice QR
               </span>
             </div>
 
             {/* Central Details Grid */}
-            <div className="col-span-6 grid grid-cols-2 gap-2 text-[11px] border-x border-slate-200 px-3">
-              <div className="space-y-1.5" dir="rtl">
+            <div className="col-span-6 grid grid-cols-2 gap-3 text-xs sm:text-sm border-x border-slate-200 px-3">
+              <div className="space-y-2" dir="rtl">
                 <div>
-                  <span className="text-slate-500 block text-[10px]">تاريخ الإصدار / Issue Date</span>
-                  <span className="font-bold text-slate-900 font-mono text-xs">
+                  <span className="text-slate-500 block text-xs font-bold">تاريخ الإصدار / Issue Date</span>
+                  <span className="font-black text-slate-900 font-mono text-sm sm:text-base">
                     {invoice.issueDate}
                   </span>
                 </div>
                 <div>
-                  <span className="text-slate-500 block text-[10px]">طريقة التسعير / Pricing Mode</span>
-                  <span className="inline-block px-1.5 py-0.5 rounded text-[10px] font-bold bg-blue-100 text-blue-800">
+                  <span className="text-slate-500 block text-xs font-bold">طريقة التسعير / Pricing Mode</span>
+                  <span className="inline-block px-2 py-0.5 rounded-md text-xs font-black bg-blue-100 text-blue-900 border border-blue-200">
                     {invoice.pricingMode === 'INCLUSIVE'
                       ? 'شامل الضريبة (Mode A)'
                       : 'غير شامل الضريبة (Mode B)'}
@@ -682,13 +703,13 @@ export const InvoicePreview: React.FC<InvoicePreviewProps> = ({
                 </div>
               </div>
 
-              <div className="space-y-1.5" dir="rtl">
+              <div className="space-y-2" dir="rtl">
                 <div>
-                  <span className="text-slate-500 block text-[10px]">طريقة الدفع / Payment Method</span>
-                  <span className="font-semibold text-slate-900">{getPaymentMethodLabel()}</span>
+                  <span className="text-slate-500 block text-xs font-bold">طريقة الدفع / Payment Method</span>
+                  <span className="font-extrabold text-slate-900 text-xs sm:text-sm">{getPaymentMethodLabel()}</span>
                 </div>
                 <div>
-                  <span className="text-slate-500 block text-[10px]">حالة السداد / Payment Status</span>
+                  <span className="text-slate-500 block text-xs font-bold">حالة السداد / Payment Status</span>
                   {getStatusBadge()}
                 </div>
               </div>
@@ -696,137 +717,145 @@ export const InvoicePreview: React.FC<InvoicePreviewProps> = ({
 
             {/* Barcode & Number Column */}
             <div className="col-span-3 flex flex-col items-center justify-center text-center">
-              <span className="text-[10px] text-slate-500 uppercase font-semibold">
+              <span className="text-xs text-slate-600 uppercase font-bold">
                 رقم الفاتورة / Invoice No.
               </span>
-              <span className="font-extrabold text-sm font-mono text-slate-900 tracking-wider">
+              <span className="font-black text-base sm:text-lg font-mono text-slate-900 tracking-wider">
                 {invoice.invoiceNumber}
               </span>
-              <InvoiceBarcode value={invoice.invoiceNumber} height={32} displayValue={false} className="mt-1" />
+              <InvoiceBarcode value={invoice.invoiceNumber} height={36} displayValue={false} className="mt-1" />
             </div>
           </div>
 
-          {/* CUSTOMER INFORMATION BAR (COMPACT & SPACE-SAVING) */}
-          <div className="px-3 py-2 border border-slate-200 rounded-lg bg-slate-50/70 mb-3 text-[11px]" dir="rtl">
-            <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1">
+          {/* CUSTOMER INFORMATION BAR (PROMINENT & CLEAR) */}
+          <div className="px-4 py-3 border border-slate-300 rounded-xl bg-slate-50/80 mb-4 text-xs sm:text-sm" dir="rtl">
+            <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
               <div className="flex flex-wrap items-center gap-2">
-                <span className="font-bold text-blue-900 text-xs">بيانات العميل / Customer:</span>
-                <span className="font-extrabold text-slate-900 text-xs">
+                <span className="font-black text-blue-950 text-sm">بيانات العميل / Customer:</span>
+                <span className="font-black text-slate-900 text-base sm:text-lg">
                   {customer.nameAr}
                 </span>
                 {customer.nameEn && (
-                  <span className="text-slate-600 font-medium text-[11px]" dir="ltr">
+                  <span className="text-slate-600 font-bold text-xs" dir="ltr">
                     ({customer.nameEn})
                   </span>
                 )}
                 {customer.id && (
-                  <span className="text-[10px] text-slate-400 font-mono">#{customer.id.slice(0, 8)}</span>
+                  <span className="text-xs text-slate-400 font-mono font-bold">#{customer.id.slice(0, 8)}</span>
                 )}
               </div>
-              <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-slate-700">
+              <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-slate-800 text-xs sm:text-sm">
                 {customer.phone && (
                   <span>
-                    <span className="text-slate-500">الجوال:</span>{' '}
-                    <strong className="font-mono text-slate-900">{customer.phone}</strong>
+                    <span className="text-slate-500 font-bold">الجوال:</span>{' '}
+                    <strong className="font-mono font-black text-slate-900">{customer.phone}</strong>
                   </span>
                 )}
                 {customer.vatNumber && (
                   <span>
-                    <span className="text-slate-500">الرقم الضريبي:</span>{' '}
-                    <strong className="font-mono text-blue-900">{customer.vatNumber}</strong>
+                    <span className="text-slate-500 font-bold">الرقم الضريبي:</span>{' '}
+                    <strong className="font-mono font-black text-blue-900">{customer.vatNumber}</strong>
                   </span>
                 )}
                 {(customer.addressAr || customer.cityAr) && (
                   <span>
-                    <span className="text-slate-500">العنوان:</span>{' '}
-                    {customer.addressAr || ''} {customer.cityAr || ''}
+                    <span className="text-slate-500 font-bold">العنوان:</span>{' '}
+                    <strong className="font-semibold text-slate-900">{customer.addressAr || ''} {customer.cityAr || ''}</strong>
                   </span>
                 )}
               </div>
             </div>
             {invoice.deliveryAddressAr && (
-              <div className="text-blue-800 bg-blue-50/80 px-2 py-0.5 rounded mt-1.5 text-[10px] inline-flex items-center gap-1">
-                <span className="font-bold">موقع التوصيل:</span> {invoice.deliveryAddressAr}
+              <div className="text-blue-900 bg-blue-100/70 border border-blue-200 px-2.5 py-1 rounded-md mt-2 text-xs inline-flex items-center gap-1.5 font-bold">
+                <span>موقع التوصيل:</span> <span>{invoice.deliveryAddressAr}</span>
               </div>
             )}
           </div>
 
           {/* LINE ITEMS TABLE */}
-          <div className="border border-slate-200 rounded-lg overflow-hidden mb-4">
-            <table className="w-full text-right text-[11px] border-collapse" dir="rtl">
-              <thead className="bg-slate-100 text-slate-800 font-bold border-b border-slate-300">
+          <div className="border-2 border-slate-300 rounded-xl overflow-hidden mb-4 shadow-2xs">
+            <table className="w-full table-fixed text-right text-xs border-collapse" dir="rtl">
+              <thead className="bg-slate-100 text-slate-900 font-black border-b-2 border-slate-300">
                 <tr>
-                  <th className="p-2 w-8 text-center border-l border-slate-200">#</th>
-                  <th className="p-2 border-l border-slate-200">
-                    <div>وصف السلعة أو الخدمة</div>
-                    <div className="text-[9px] font-normal text-slate-500 uppercase">Item Description</div>
+                  <th className="w-[5%] py-2.5 px-1 text-center border-l border-slate-200">#</th>
+                  <th className="w-[35%] py-2.5 px-3 border-l border-slate-200 text-right">
+                    <div className="text-xs sm:text-sm font-black">وصف السلعة أو الخدمة</div>
+                    <div className="text-[10px] font-semibold text-slate-500 uppercase">Item Description</div>
                   </th>
-                  <th className="p-2 w-14 text-center border-l border-slate-200">
-                    <div>الكمية</div>
-                    <div className="text-[9px] font-normal text-slate-500 uppercase">Qty</div>
+                  <th className="w-[7%] py-2.5 px-1 text-center border-l border-slate-200">
+                    <div className="text-xs sm:text-sm font-black">الكمية</div>
+                    <div className="text-[10px] font-semibold text-slate-500 uppercase">Qty</div>
                   </th>
-                  <th className="p-2 w-16 text-center border-l border-slate-200">
-                    <div>الوحدة</div>
-                    <div className="text-[9px] font-normal text-slate-500 uppercase">Unit</div>
+                  <th className="w-[8%] py-2.5 px-1 text-center border-l border-slate-200">
+                    <div className="text-xs sm:text-sm font-black">الوحدة</div>
+                    <div className="text-[10px] font-semibold text-slate-500 uppercase">Unit</div>
                   </th>
-                  <th className="p-2 w-20 text-center border-l border-slate-200">
-                    <div>سعر الوحدة</div>
-                    <div className="text-[9px] font-normal text-slate-500 uppercase">Unit Price</div>
+                  <th className="w-[11%] py-2.5 px-1 text-center border-l border-slate-200">
+                    <div className="text-xs sm:text-sm font-black">سعر الوحدة</div>
+                    <div className="text-[10px] font-semibold text-slate-500 uppercase">Unit Price</div>
                   </th>
-                  <th className="p-2 w-16 text-center border-l border-slate-200">
-                    <div>الخصم</div>
-                    <div className="text-[9px] font-normal text-slate-500 uppercase">Discount</div>
+                  <th className="w-[7%] py-2.5 px-1 text-center border-l border-slate-200">
+                    <div className="text-xs sm:text-sm font-black">الخصم</div>
+                    <div className="text-[10px] font-semibold text-slate-500 uppercase">Disc</div>
                   </th>
-                  <th className="p-2 w-14 text-center border-l border-slate-200">
-                    <div>الضريبة</div>
-                    <div className="text-[9px] font-normal text-slate-500 uppercase">VAT %</div>
+                  <th className="w-[7%] py-2.5 px-1 text-center border-l border-slate-200">
+                    <div className="text-xs sm:text-sm font-black">الضريبة</div>
+                    <div className="text-[10px] font-semibold text-slate-500 uppercase">VAT %</div>
                   </th>
-                  <th className="p-2 w-20 text-center border-l border-slate-200">
-                    <div>مبلغ الضريبة</div>
-                    <div className="text-[9px] font-normal text-slate-500 uppercase">VAT Amt</div>
+                  <th className="w-[9%] py-2.5 px-1 text-center border-l border-slate-200">
+                    <div className="text-xs sm:text-sm font-black">مبلغ الضريبة</div>
+                    <div className="text-[10px] font-semibold text-slate-500 uppercase">VAT Amt</div>
                   </th>
-                  <th className="p-2 w-24 text-center">
-                    <div>الإجمالي</div>
-                    <div className="text-[9px] font-normal text-slate-500 uppercase">Total (SAR)</div>
+                  <th className="w-[11%] py-2.5 px-1 text-center">
+                    <div className="text-xs sm:text-sm font-black">الإجمالي</div>
+                    <div className="text-[10px] font-semibold text-slate-500 uppercase">Total (SAR)</div>
                   </th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-200 text-slate-800">
                 {items.map((item, idx) => (
-                  <tr key={item.id || idx} className={idx % 2 === 1 ? 'bg-slate-50/50' : 'bg-white'}>
-                    <td className="p-2 text-center font-mono text-slate-500 border-l border-slate-200">
+                  <tr key={item.id || idx} className={idx % 2 === 1 ? 'bg-slate-50/70' : 'bg-white'}>
+                    <td className="w-[5%] py-2.5 px-1 text-center font-mono font-bold text-slate-600 border-l border-slate-200 align-middle">
                       {idx + 1}
                     </td>
-                    <td className="p-2 border-l border-slate-200">
-                      <div className="font-semibold text-slate-900">{item.nameAr}</div>
-                      {item.nameEn && (
-                        <div className="text-[10px] text-slate-500 font-medium" dir="ltr">
-                          {item.nameEn}
+                    <td className="w-[35%] py-2.5 px-3 border-l border-slate-200 text-right align-middle">
+                      <div className="space-y-0.5">
+                        <div className="font-extrabold text-xs sm:text-sm text-slate-900 leading-snug break-words">
+                          {item.nameAr}
                         </div>
-                      )}
-                      {item.code && (
-                        <span className="text-[9px] font-mono text-slate-400">SKU: {item.code}</span>
-                      )}
+                        <div className="flex flex-wrap items-center gap-1.5 text-[11px]">
+                          {item.nameEn && (
+                            <span className="text-slate-500 font-medium" dir="ltr">
+                              {item.nameEn}
+                            </span>
+                          )}
+                          {item.code && (
+                            <span className="font-mono font-bold text-slate-600 bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200 text-[10px]">
+                              #{item.code}
+                            </span>
+                          )}
+                        </div>
+                      </div>
                     </td>
-                    <td className="p-2 text-center font-mono font-bold border-l border-slate-200">
+                    <td className="w-[7%] py-2.5 px-1 text-center font-mono font-black text-xs sm:text-sm border-l border-slate-200 align-middle">
                       {item.quantity}
                     </td>
-                    <td className="p-2 text-center text-slate-600 border-l border-slate-200">
+                    <td className="w-[8%] py-2.5 px-1 text-center font-bold text-slate-700 border-l border-slate-200 text-xs align-middle">
                       {item.unitAr || item.unitEn || 'حبة'}
                     </td>
-                    <td className="p-2 text-center font-mono border-l border-slate-200">
+                    <td className="w-[11%] py-2.5 px-1 text-center font-mono font-black text-slate-900 border-l border-slate-200 text-xs sm:text-sm align-middle">
                       {formatCurrency(item.unitPrice)}
                     </td>
-                    <td className="p-2 text-center font-mono text-rose-600 border-l border-slate-200">
+                    <td className="w-[7%] py-2.5 px-1 text-center font-mono font-bold text-rose-600 border-l border-slate-200 text-xs align-middle">
                       {item.discountAmount > 0 ? `-${formatCurrency(item.discountAmount)}` : '0.00'}
                     </td>
-                    <td className="p-2 text-center font-mono border-l border-slate-200">
+                    <td className="w-[7%] py-2.5 px-1 text-center font-mono font-bold border-l border-slate-200 text-xs align-middle">
                       {item.vatRate}%
                     </td>
-                    <td className="p-2 text-center font-mono text-blue-700 font-semibold border-l border-slate-200">
+                    <td className="w-[9%] py-2.5 px-1 text-center font-mono font-black text-blue-700 border-l border-slate-200 text-xs sm:text-sm align-middle">
                       {formatCurrency(item.vatAmount)}
                     </td>
-                    <td className="p-2 text-center font-mono font-bold text-slate-900">
+                    <td className="w-[11%] py-2.5 px-1 text-center font-mono font-black text-slate-900 text-xs sm:text-sm align-middle">
                       {formatCurrency(item.subtotalWithVat)}
                     </td>
                   </tr>
@@ -838,64 +867,64 @@ export const InvoicePreview: React.FC<InvoicePreviewProps> = ({
           {/* TOTALS & FINANCIAL SUMMARY SECTION */}
           <div className="grid grid-cols-12 gap-4 mb-5 items-start">
             {/* Notes & Bank Details (Left side in RTL) */}
-            <div className="col-span-12 sm:col-span-7 space-y-2 text-[11px]" dir="rtl">
+            <div className="col-span-12 sm:col-span-6 space-y-2.5 text-xs sm:text-sm" dir="rtl">
               {invoice.notesAr && (
-                <div className="p-2.5 bg-slate-50 border border-slate-200 rounded-lg">
-                  <span className="font-bold text-slate-800 block text-[10px] mb-0.5">ملاحظات / Notes:</span>
-                  <p className="text-slate-700">{invoice.notesAr}</p>
+                <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl">
+                  <span className="font-extrabold text-slate-800 block text-xs mb-1">ملاحظات / Notes:</span>
+                  <p className="text-slate-800 font-medium">{invoice.notesAr}</p>
                 </div>
               )}
               {company.bankIban && (
-                <div className="p-2.5 bg-blue-50/50 border border-blue-200/60 rounded-lg">
-                  <span className="font-bold text-blue-900 block text-[10px] mb-0.5">
+                <div className="p-3 bg-blue-50/70 border border-blue-200 rounded-xl">
+                  <span className="font-black text-blue-900 block text-xs mb-1">
                     البيانات البنكية للسداد / Bank Details for Transfer:
                   </span>
-                  <p className="text-slate-800"><span className="text-slate-500">البنك / Bank:</span> {company.bankName}</p>
-                  <p className="font-mono font-bold text-blue-900"><span className="text-slate-500 font-sans">IBAN:</span> {company.bankIban}</p>
+                  <p className="text-slate-800 font-semibold"><span className="text-slate-500 font-normal">البنك / Bank:</span> {company.bankName}</p>
+                  <p className="font-mono font-black text-blue-900 mt-0.5"><span className="text-slate-500 font-sans font-normal">IBAN:</span> {company.bankIban}</p>
                 </div>
               )}
             </div>
 
             {/* Calculations Breakdown (Right side in RTL) */}
-            <div className="col-span-12 sm:col-span-5" dir="rtl">
-              <div className="border border-slate-300 rounded-lg overflow-hidden bg-slate-50/50">
-                <table className="w-full text-xs">
+            <div className="col-span-12 sm:col-span-6" dir="rtl">
+              <div className="border-2 border-slate-300 rounded-xl overflow-hidden bg-slate-50/70 shadow-2xs">
+                <table className="w-full text-xs sm:text-sm">
                   <tbody className="divide-y divide-slate-200">
                     <tr>
-                      <td className="p-2 text-slate-600">
+                      <td className="p-2.5 text-slate-700 font-bold">
                         <div>الإجمالي غير شامل الضريبة</div>
-                        <div className="text-[9px] text-slate-400">Total (Excluding VAT)</div>
+                        <div className="text-[10px] text-slate-500">Total (Excluding VAT)</div>
                       </td>
-                      <td className="p-2 text-left font-mono font-semibold text-slate-800">
-                        {formatCurrency(invoice.subtotalBeforeVat)} <span className="text-[10px]">ر.س</span>
+                      <td className="p-2.5 text-left font-mono font-black text-sm sm:text-base text-slate-900">
+                        {formatCurrency(invoice.subtotalBeforeVat)} <span className="text-xs font-normal">ر.س</span>
                       </td>
                     </tr>
                     {invoice.totalDiscount > 0 && (
                       <tr>
-                        <td className="p-2 text-slate-600">
+                        <td className="p-2.5 text-slate-700 font-bold">
                           <div>مجموع الخصومات</div>
-                          <div className="text-[9px] text-slate-400">Total Discounts</div>
+                          <div className="text-[10px] text-slate-500">Total Discounts</div>
                         </td>
-                        <td className="p-2 text-left font-mono font-semibold text-rose-600">
-                          -{formatCurrency(invoice.totalDiscount)} <span className="text-[10px]">ر.س</span>
+                        <td className="p-2.5 text-left font-mono font-black text-sm sm:text-base text-rose-600">
+                          -{formatCurrency(invoice.totalDiscount)} <span className="text-xs font-normal">ر.س</span>
                         </td>
                       </tr>
                     )}
                     <tr>
-                      <td className="p-2 text-slate-600">
+                      <td className="p-2.5 text-slate-700 font-bold">
                         <div>مجموع ضريبة القيمة المضافة (15%)</div>
-                        <div className="text-[9px] text-slate-400">Total VAT (15%)</div>
+                        <div className="text-[10px] text-slate-500">Total VAT (15%)</div>
                       </td>
-                      <td className="p-2 text-left font-mono font-semibold text-blue-700">
-                        {formatCurrency(invoice.totalVat)} <span className="text-[10px]">ر.س</span>
+                      <td className="p-2.5 text-left font-mono font-black text-sm sm:text-base text-blue-700">
+                        {formatCurrency(invoice.totalVat)} <span className="text-xs font-normal">ر.س</span>
                       </td>
                     </tr>
                     <tr className="bg-slate-900 text-white">
-                      <td className="p-2.5 font-bold">
-                        <div>إجمالي المبلغ المستحق</div>
-                        <div className="text-[9px] font-normal text-slate-300">TOTAL AMOUNT DUE</div>
+                      <td className="p-3.5 font-black">
+                        <div className="text-sm sm:text-base">إجمالي المبلغ المستحق</div>
+                        <div className="text-xs font-semibold text-slate-300">TOTAL AMOUNT DUE</div>
                       </td>
-                      <td className="p-2.5 text-left font-mono font-extrabold text-sm text-emerald-400">
+                      <td className="p-3.5 text-left font-mono font-black text-lg sm:text-xl text-emerald-400">
                         {formatCurrency(invoice.grandTotal)} <span className="text-xs text-white">ر.س</span>
                       </td>
                     </tr>
@@ -975,6 +1004,80 @@ export const InvoicePreview: React.FC<InvoicePreviewProps> = ({
         invoice={invoice}
         lang={lang}
       />
+
+      {/* In-App Delete Invoice Confirmation Modal (100% reliable inside iFrames) */}
+      {showDeleteModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs font-sans">
+          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-rose-200 space-y-4">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <div className="flex items-center gap-2.5 text-rose-600 font-extrabold text-base">
+                <div className="w-9 h-9 rounded-xl bg-rose-100 flex items-center justify-center">
+                  <Trash2 className="w-5 h-5 text-rose-600" />
+                </div>
+                <span>{isRtl ? 'تأكيد حذف فاتورة المبيعات' : 'Confirm Invoice Deletion'}</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowDeleteModal(false)}
+                className="p-1 text-slate-400 hover:text-slate-600 rounded-lg"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-3.5 bg-rose-50/70 border border-rose-200 rounded-xl space-y-2 text-xs">
+              <div className="flex justify-between items-center text-slate-700">
+                <span className="font-semibold">{isRtl ? 'رقم الفاتورة:' : 'Invoice No:'}</span>
+                <span className="font-mono font-black text-rose-700 text-sm">{invoice.invoiceNumber}</span>
+              </div>
+              <div className="flex justify-between items-center text-slate-700">
+                <span className="font-semibold">{isRtl ? 'العميل:' : 'Customer:'}</span>
+                <span className="font-bold text-slate-900">
+                  {isRtl ? invoice.customer.nameAr : (invoice.customer.nameEn || invoice.customer.nameAr)}
+                </span>
+              </div>
+              <div className="flex justify-between items-center text-slate-700">
+                <span className="font-semibold">{isRtl ? 'المبلغ الإجمالي:' : 'Grand Total:'}</span>
+                <span className="font-mono font-black text-slate-900">
+                  {formatCurrency(invoice.grandTotal)} SAR
+                </span>
+              </div>
+              <div className="flex justify-between items-center text-slate-700">
+                <span className="font-semibold">{isRtl ? 'تاريخ الفاتورة:' : 'Date:'}</span>
+                <span className="font-mono text-slate-600">{invoice.issueDate}</span>
+              </div>
+            </div>
+
+            <p className="text-xs text-slate-600 leading-relaxed">
+              {isRtl
+                ? 'هل أنت متأكد من رغبتك في حذف هذه الفاتورة نهائياً؟ سيتم إزالتها من النظام وحسابات المبيعات فوراً.'
+                : 'Are you sure you want to permanently delete this sales invoice? It will be removed from your records immediately.'}
+            </p>
+
+            <div className="flex items-center justify-end gap-2.5 pt-2">
+              <button
+                type="button"
+                onClick={() => setShowDeleteModal(false)}
+                className="px-4 py-2.5 text-xs font-bold text-slate-700 hover:bg-slate-100 rounded-xl transition border border-slate-300"
+              >
+                {isRtl ? 'إلغاء' : 'Cancel'}
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  storage.deleteInvoice(invoice.id);
+                  setShowDeleteModal(false);
+                  onDelete?.();
+                }}
+                className="px-5 py-2.5 text-xs font-black text-white bg-rose-600 hover:bg-rose-700 active:bg-rose-800 rounded-xl transition shadow-md shadow-rose-600/30 inline-flex items-center gap-1.5"
+              >
+                <Trash2 className="w-4 h-4" />
+                <span>{isRtl ? 'نعم، احذف الفاتورة نهائياً' : 'Yes, Delete Permanently'}</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

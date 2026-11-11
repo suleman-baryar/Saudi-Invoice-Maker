@@ -1,0 +1,34 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <linearGradient id="paintGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#047857" />
+      <stop offset="50%" stop-color="#065f46" />
+      <stop offset="100%" stop-color="#064e3b" />
+    </linearGradient>
+    <linearGradient id="goldGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#fbbf24" />
+      <stop offset="100%" stop-color="#f59e0b" />
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="112" fill="url(#paintGrad)" />
+  <circle cx="256" cy="256" r="190" fill="none" stroke="rgba(255,255,255,0.15)" stroke-width="8" />
+  
+  <!-- Paint Bucket / Roll / Document Icon -->
+  <g transform="translate(136, 120)">
+    <!-- Invoice Sheet -->
+    <rect x="20" y="20" width="200" height="240" rx="16" fill="#ffffff" />
+    <line x1="50" y1="70" x2="190" y2="70" stroke="#047857" stroke-width="12" stroke-linecap="round" />
+    <line x1="50" y1="110" x2="160" y2="110" stroke="#94a3b8" stroke-width="8" stroke-linecap="round" />
+    <line x1="50" y1="145" x2="180" y2="145" stroke="#94a3b8" stroke-width="8" stroke-linecap="round" />
+    <line x1="50" y1="180" x2="130" y2="180" stroke="#94a3b8" stroke-width="8" stroke-linecap="round" />
+    <rect x="50" y="210" width="70" height="24" rx="6" fill="#10b981" />
+    
+    <!-- Paint Roller Overlay -->
+    <g transform="translate(110, 80)">
+      <rect x="0" y="0" width="110" height="42" rx="10" fill="url(#goldGrad)" stroke="#b45309" stroke-width="3" />
+      <path d="M 55,42 L 55,75 L 25,100 L 25,145" fill="none" stroke="#475569" stroke-width="8" stroke-linecap="round" stroke-linejoin="round" />
+      <rect x="17" y="145" width="16" height="45" rx="5" fill="#334155" />
+    </g>
+  </g>
+  <text x="256" y="445" font-family="Cairo, sans-serif" font-weight="900" font-size="34" fill="#ffffff" text-anchor="middle">مركز المالك</text>
+</svg>

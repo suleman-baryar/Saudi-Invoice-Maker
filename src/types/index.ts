@@ -147,3 +147,124 @@ export interface DashboardMetrics {
   draftCount: number;
   draftAmount: number;
 }
+
+// ==========================================
+// SUPPLIER & PURCHASE INVOICE TYPES
+// ==========================================
+
+export interface Supplier {
+  id: string;
+  nameAr: string;
+  nameEn: string;
+  companyNameAr?: string;
+  companyNameEn?: string;
+  contactPerson?: string;
+  phone: string;
+  email?: string;
+  vatNumber?: string; // 15 digits
+  crNumber?: string;
+  addressAr?: string;
+  addressEn?: string;
+  cityAr?: string;
+  cityEn?: string;
+  openingBalance: number;
+  totalPurchases: number;
+  totalPaid: number;
+  currentBalance: number; // outstanding amount owed to supplier
+  notes?: string;
+  createdAt: string;
+  updatedAt?: string;
+}
+
+export type PurchaseUnitType =
+  | 'PIECE'
+  | 'BUCKET'
+  | 'CAN'
+  | 'BOX'
+  | 'ROLL'
+  | 'LITER'
+  | 'METER'
+  | 'BAG'
+  | 'OTHER';
+
+export interface PurchaseItem {
+  id: string;
+  productId?: string;
+  code: string; // SKU / Code
+  nameAr: string;
+  nameEn: string;
+  unit: PurchaseUnitType;
+  unitAr: string;
+  unitEn: string;
+  quantity: number;
+  unitPrice: number; // entered purchase price
+  discountPercent: number; // 0-100
+  discountAmount: number; // line discount
+  vatRate: number; // 0, 5, 15, or Custom
+  vatTreatment: PricingMode; // INCLUSIVE or EXCLUSIVE
+  subtotalBeforeVat: number; // taxable amount
+  vatAmount: number; // VAT value
+  subtotalWithVat: number; // line total
+  isVatRecoverable?: boolean; // eligible for recovery under Saudi tax rules
+}
+
+export interface PurchasePaymentEntry {
+  id: string;
+  date: string;
+  amount: number;
+  paymentMethod: PaymentMethod;
+  referenceNumber?: string;
+  notes?: string;
+  recordedBy?: string;
+}
+
+export interface PurchaseInvoice {
+  id: string;
+  invoiceNumber: string; // PINV-2026-0001
+  supplierInvoiceNumber?: string; // Original invoice # from supplier
+  purchaseOrderNumber?: string; // PO reference
+  issueDate: string; // YYYY-MM-DD
+  issueTime?: string; // HH:mm:ss
+  dueDate?: string; // YYYY-MM-DD
+  status: InvoiceStatus; // FINALIZED | DRAFT | CANCELLED
+  pricingMode: PricingMode; // INCLUSIVE | EXCLUSIVE
+
+  // Supplier Snapshot
+  supplier: Supplier;
+
+  // Items
+  items: PurchaseItem[];
+
+  // Financials
+  subtotalBeforeVat: number;
+  totalDiscount: number;
+  taxableAmount: number;
+  totalVat: number;
+  grandTotal: number;
+
+  // Payment Tracking
+  paymentMethod: PaymentMethod;
+  paymentStatus: PaymentStatus; // PAID | PARTIALLY_PAID | UNPAID
+  amountPaid: number;
+  remainingBalance: number;
+  payments: PurchasePaymentEntry[];
+
+  // Notes & Reference
+  notesAr?: string;
+  notesEn?: string;
+  internalReference?: string;
+  cancellationReason?: string;
+  cancelledAt?: string;
+
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface PurchaseDashboardMetrics {
+  totalPurchasesToday: number;
+  totalPurchasesMonth: number;
+  totalOutstandingSupplierPayments: number;
+  totalPaidPurchases: number;
+  purchaseInvoicesCount: number;
+  totalVatInput: number;
+}

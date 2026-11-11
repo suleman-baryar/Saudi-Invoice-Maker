@@ -8,6 +8,7 @@ import {
   Upload,
   Download,
   RotateCcw,
+  Check,
   CheckCircle,
   CreditCard,
   MapPin,
@@ -20,8 +21,11 @@ import {
   ExternalLink,
   RefreshCw,
   Copy,
-  Check,
   Stamp,
+  Share,
+  PlusSquare,
+  Zap,
+  WifiOff,
 } from 'lucide-react';
 import { WhatsAppIcon } from './WhatsAppIcon';
 import {
@@ -136,12 +140,22 @@ export const CompanySettings: React.FC<CompanySettingsProps> = ({ onSaved, lang 
   };
 
   const handleResetData = () => {
-    if (window.confirm(t.resetConfirm)) {
-      storage.resetToDefaultSampleData();
+    if (
+      window.confirm(
+        isRtl
+          ? 'هل أنت متأكد من حذف كافة البيانات التجريبية نهائياً والبدء بسجلات المحل الفعلية فقط؟'
+          : 'Are you sure you want to permanently remove all demo data and keep only real shop records?'
+      )
+    ) {
+      storage.purgeAllDemoData();
       setProfile(storage.getCompany());
       onSaved();
-      setImportStatus(isRtl ? 'تمت استعادة البيانات الافتراضية.' : 'Default sample data restored.');
-      setTimeout(() => setImportStatus(null), 3000);
+      setImportStatus(
+        isRtl
+          ? 'تم حذف جميع البيانات التجريبية بنجاح! التطبيق جاهز للعمل الفعلي.'
+          : 'All demo data removed successfully! App is ready for live business.'
+      );
+      setTimeout(() => setImportStatus(null), 3500);
     }
   };
 
@@ -600,6 +614,61 @@ export const CompanySettings: React.FC<CompanySettingsProps> = ({ onSaved, lang 
               </span>
             </div>
           </div>
+
+          {/* Meta WhatsApp Cloud API Credentials */}
+          <div className="bg-slate-50 border border-slate-200 rounded-xl p-3.5 space-y-3">
+            <div className="flex items-center justify-between">
+              <span className="font-bold text-xs text-slate-800 flex items-center gap-1.5">
+                <ShieldCheck className="w-4 h-4 text-emerald-600" />
+                <span>{isRtl ? 'بيانات ربط Meta WhatsApp Business API (لإرسال ملف الـ PDF كمستند مباشر):' : 'Meta WhatsApp Business API Credentials (PDF Document Dispatch):'}</span>
+              </span>
+              <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold ${
+                profile.whatsappPhoneNumberId && profile.whatsappAccessToken
+                  ? 'bg-emerald-100 text-emerald-800 border border-emerald-200'
+                  : 'bg-amber-100 text-amber-800 border border-amber-200'
+              }`}>
+                {profile.whatsappPhoneNumberId && profile.whatsappAccessToken
+                  ? (isRtl ? 'مربوط وجاهز للإرسال ✓' : 'Configured ✓')
+                  : (isRtl ? 'غير مربوط (اختياري)' : 'Not Configured (Optional)')}
+              </span>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">
+                  {isRtl ? 'معرف رقم الهاتف (Phone Number ID):' : 'Meta Phone Number ID:'}
+                </label>
+                <input
+                  type="text"
+                  value={profile.whatsappPhoneNumberId || ''}
+                  onChange={(e) => handleChange('whatsappPhoneNumberId', e.target.value)}
+                  placeholder="e.g. 102938475612345"
+                  className="w-full text-xs font-mono p-2.5 rounded-lg border border-slate-300 bg-white"
+                  dir="ltr"
+                />
+                <span className="text-[10px] text-slate-400 mt-1 block">
+                  {isRtl ? 'معرف الرقم المخصص لحساب واتساب للأعمال من بوابة مطوري Meta' : 'Found in Meta App Dashboard > WhatsApp > API Setup'}
+                </span>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">
+                  {isRtl ? 'رمز الوصول (Permanent Access Token):' : 'Permanent Access Token:'}
+                </label>
+                <input
+                  type="password"
+                  value={profile.whatsappAccessToken || ''}
+                  onChange={(e) => handleChange('whatsappAccessToken', e.target.value)}
+                  placeholder="EAAB..."
+                  className="w-full text-xs font-mono p-2.5 rounded-lg border border-slate-300 bg-white"
+                  dir="ltr"
+                />
+                <span className="text-[10px] text-slate-400 mt-1 block">
+                  {isRtl ? 'رمز وصول مستخدم النظام مع صلاحية whatsapp_business_messaging' : 'System User Token with whatsapp_business_messaging scope'}
+                </span>
+              </div>
+            </div>
+          </div>
         </div>
 
         {/* Invoice PDF & Print Watermark Settings (Paid / Draft) */}
@@ -782,6 +851,111 @@ export const CompanySettings: React.FC<CompanySettingsProps> = ({ onSaved, lang 
           </button>
         </div>
       </form>
+
+      {/* Mobile App Installation (iPhone & Android) Card */}
+      <div className="bg-gradient-to-r from-emerald-950 via-teal-900 to-slate-900 text-white p-5 rounded-2xl border border-emerald-800 shadow-md space-y-4">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-emerald-800/80 pb-3">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-emerald-500/20 text-emerald-300 border border-emerald-400/30 flex items-center justify-center font-bold">
+              <Smartphone className="w-5 h-5" />
+            </div>
+            <div>
+              <h3 className="font-extrabold text-white text-base">
+                {isRtl ? 'تطبيق الجوال لمركز المالك (iPhone & Android)' : 'Mobile App for Markaz Al Malki (iOS & Android)'}
+              </h3>
+              <p className="text-xs text-emerald-200/80">
+                {isRtl
+                  ? 'يعمل كتطبيق أصيل على جوالك بكامل الشاشة، وبدون الحاجة لإنترنت في المحل'
+                  : 'Runs as a native standalone app on your home screen with offline capability'}
+              </p>
+            </div>
+          </div>
+          <span className="text-[10px] font-black bg-emerald-400 text-slate-950 px-2.5 py-1 rounded-full uppercase tracking-wider">
+            PWA Ready
+          </span>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {/* iPhone / iOS Guide */}
+          <div className="bg-white/10 rounded-xl p-4 border border-white/15 space-y-2.5 text-xs">
+            <div className="flex items-center gap-2 font-black text-sm text-emerald-300">
+              <span>🍏</span>
+              <span>{isRtl ? 'طريقة التثبيت على آيفون (iPhone)' : 'How to Install on iPhone'}</span>
+            </div>
+            <ol className="space-y-2 text-slate-200 list-decimal list-inside pr-1">
+              <li>
+                {isRtl ? 'افتح رابط التطبيق عبر متصفح' : 'Open this app link in'}{' '}
+                <strong className="text-white underline">Safari</strong> {isRtl ? 'فقط.' : 'browser.'}
+              </li>
+              <li>
+                {isRtl ? 'اضغط على زر المشاركة' : 'Tap the Share icon'}{' '}
+                <span className="inline-flex items-center p-0.5 bg-blue-500/30 text-blue-200 rounded">
+                  <Share className="w-3 h-3 inline" />
+                </span>{' '}
+                {isRtl ? 'أسفل الشاشة.' : 'at the bottom toolbar.'}
+              </li>
+              <li>
+                {isRtl ? 'اختر' : 'Scroll down & tap'}{' '}
+                <strong className="text-emerald-300">«إضافة إلى الصفحة الرئيسية»</strong> (Add to Home Screen).
+              </li>
+              <li>
+                {isRtl ? 'اضغط' : 'Tap'} <strong className="text-white">«إضافة» (Add)</strong> {isRtl ? 'بأعلى الزاوية لتثبيت التطبيق فوراً.' : 'in top corner.'}
+              </li>
+            </ol>
+          </div>
+
+          {/* Android / Play Store Guide */}
+          <div className="bg-white/10 rounded-xl p-4 border border-white/15 space-y-2.5 text-xs">
+            <div className="flex items-center gap-2 font-black text-sm text-teal-300">
+              <span>🤖</span>
+              <span>{isRtl ? 'طريقة التثبيت على أندرويد (Android)' : 'How to Install on Android'}</span>
+            </div>
+            <ol className="space-y-2 text-slate-200 list-decimal list-inside pr-1">
+              <li>
+                {isRtl ? 'افتح الموقع عبر متصفح' : 'Open in'}{' '}
+                <strong className="text-white underline">Google Chrome</strong>.
+              </li>
+              <li>
+                {isRtl ? 'اضغط على زر القائمة الثلاث نقاط' : 'Tap the 3-dots menu'}{' '}
+                <strong className="text-white">(⋮)</strong> {isRtl ? 'أعلى الزاوية.' : 'in top corner.'}
+              </li>
+              <li>
+                {isRtl ? 'اختر' : 'Select'}{' '}
+                <strong className="text-teal-300">«تثبيت التطبيق»</strong> (Install app) {isRtl ? 'أو إضافة للشاشة الرئيسية.' : 'or Add to Home Screen.'}
+              </li>
+              <li>
+                {isRtl
+                  ? 'التطبيق جاهز أيضاً للتحويل كملف APK لمتجر Google Play عبر TWA.'
+                  : 'Ready to bundle as an APK for Google Play Store using TWA.'}
+              </li>
+            </ol>
+          </div>
+        </div>
+
+        <div className="pt-2 flex flex-wrap items-center justify-between gap-3 text-emerald-200 text-xs border-t border-white/10">
+          <div className="flex items-center gap-3">
+            <span className="flex items-center gap-1">
+              <Zap className="w-3.5 h-3.5 text-amber-400" />
+              <span>{isRtl ? 'سريع جداً لكاشير المحل' : 'Fast In-Store POS'}</span>
+            </span>
+            <span className="flex items-center gap-1">
+              <WifiOff className="w-3.5 h-3.5 text-emerald-400" />
+              <span>{isRtl ? 'يعمل بدون إنترنت' : 'Offline Mode'}</span>
+            </span>
+          </div>
+          <div className="flex items-center gap-2">
+            <a
+              href="/privacy-policy.html"
+              target="_blank"
+              rel="noreferrer"
+              className="text-[11px] text-emerald-200 hover:text-white underline font-semibold flex items-center gap-1"
+            >
+              <ShieldCheck className="w-3 h-3 text-emerald-300" />
+              <span>{isRtl ? 'سياسة الخصوصية (Google Play)' : 'Privacy Policy'}</span>
+            </a>
+          </div>
+        </div>
+      </div>
 
       {/* Supabase Cloud Database & Storage Section */}
       <div className="bg-emerald-50/60 p-5 rounded-xl border border-emerald-200 space-y-3.5">

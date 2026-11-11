@@ -253,21 +253,31 @@ export interface DirectSendResult {
   senderBusinessName?: string;
   recipient?: string;
   status?: string;
+  documentSent?: boolean;
+  filename?: string;
+  mediaId?: string;
   noReply?: boolean;
   automatedDispatch?: boolean;
   publicInvoiceLink?: string;
+  publicPdfUrl?: string;
+  requiresMetaConfig?: boolean;
+  oauthException?: boolean;
+  directWhatsAppFallback?: boolean;
+  simulationMode?: boolean;
+  channel?: string;
   message?: string;
   error?: string;
 }
 
 /**
- * Sends the invoice PDF directly to customer WhatsApp WITHOUT opening WhatsApp app/web,
- * displaying the official business name ("مركز الملك للدهانات") with No-Reply enforcement.
+ * Sends the invoice PDF directly as a DOCUMENT to customer WhatsApp via Meta WhatsApp Business API,
+ * displaying the verified business name with No-Reply enforcement.
  */
 export async function sendInvoicePdfDirect(
   invoice: Invoice,
   recipientPhone: string,
-  containerId: string = 'printable-invoice-container'
+  containerId: string = 'printable-invoice-container',
+  customConfig?: { phoneNumberId?: string; accessToken?: string; simulateDemo?: boolean }
 ): Promise<DirectSendResult> {
   const cleanPhone = formatPhoneForWhatsApp(recipientPhone);
   if (!cleanPhone) {
@@ -289,8 +299,13 @@ export async function sendInvoicePdfDirect(
     }
   }
 
-  const businessName = invoice.company?.nameAr || 'مركز الملك للدهانات';
+  const businessName = invoice.company?.whatsappBusinessName || invoice.company?.nameAr || 'مركز الملك للدهانات';
   const publicLink = getInvoicePublicUrl(invoice);
+
+  const cloudApiConfig = customConfig || {
+    phoneNumberId: invoice.company?.whatsappPhoneNumberId,
+    accessToken: invoice.company?.whatsappAccessToken,
+  };
 
   try {
     const res = await fetch('/api/whatsapp/send-pdf-direct', {
@@ -308,22 +323,15 @@ export async function sendInvoicePdfDirect(
         filename: `Invoice-${invoice.invoiceNumber}.pdf`,
         pdfBase64,
         invoiceData: invoice,
+        cloudApiConfig,
+        simulateDemo: customConfig?.simulateDemo,
       }),
     });
 
-    if (res.ok) {
-      const data: DirectSendResult = await res.json();
-      return {
-        ...data,
-        publicInvoiceLink: data.publicInvoiceLink || publicLink,
-      };
-    }
-
-    const errData = await res.json().catch(() => ({}));
+    const data: DirectSendResult = await res.json().catch(() => ({ success: false, error: 'استجابة غير صالحة من الخادم' }));
     return {
-      success: false,
-      error: errData?.error || 'فشل إرسال الفاتورة عبر WhatsApp Cloud API',
-      publicInvoiceLink: publicLink,
+      ...data,
+      publicInvoiceLink: data.publicInvoiceLink || publicLink,
     };
   } catch (err: any) {
     return {

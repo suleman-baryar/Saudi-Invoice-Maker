@@ -349,8 +349,82 @@ async function startServer() {
     }
   });
 
+  // WhatsApp Meta Cloud API Configuration store
+  const WHATSAPP_CONFIG_FILE = path.join(DATA_DIR, 'whatsapp_config.json');
+  const PDF_DIR = path.join(DATA_DIR, 'pdfs');
+  if (!fs.existsSync(PDF_DIR)) {
+    try {
+      fs.mkdirSync(PDF_DIR, { recursive: true });
+    } catch (e) {
+      console.warn('Could not create pdf dir:', e);
+    }
+  }
+
+  interface WhatsAppConfig {
+    phoneNumberId?: string;
+    accessToken?: string;
+    businessName: string;
+  }
+
+  // Validates real Meta credentials and rejects dummy placeholders like '5752', '1234', etc.
+  const isValidMetaCredentials = (pId?: string, tok?: string): boolean => {
+    if (!pId || !tok) return false;
+    const p = pId.trim();
+    const t = tok.trim();
+    // Valid Meta Phone ID is numeric and at least 10 digits
+    if (p.length < 10 || !/^\d+$/.test(p)) return false;
+    // Valid Meta Access Token starts with 'EAA' and has at least 30 characters
+    if (t.length < 30 || !t.startsWith('EAA')) return false;
+    return true;
+  };
+
+  let whatsappConfig: WhatsAppConfig = {
+    phoneNumberId: isValidMetaCredentials(process.env.WHATSAPP_PHONE_NUMBER_ID, process.env.WHATSAPP_ACCESS_TOKEN)
+      ? process.env.WHATSAPP_PHONE_NUMBER_ID
+      : '',
+    accessToken: isValidMetaCredentials(process.env.WHATSAPP_PHONE_NUMBER_ID, process.env.WHATSAPP_ACCESS_TOKEN)
+      ? process.env.WHATSAPP_ACCESS_TOKEN
+      : '',
+    businessName: process.env.WHATSAPP_BUSINESS_NAME || 'مركز الملك للدهانات',
+  };
+
+  try {
+    if (fs.existsSync(WHATSAPP_CONFIG_FILE)) {
+      const raw = fs.readFileSync(WHATSAPP_CONFIG_FILE, 'utf-8');
+      const parsed = JSON.parse(raw);
+      if (isValidMetaCredentials(parsed.phoneNumberId, parsed.accessToken)) {
+        whatsappConfig = { ...whatsappConfig, ...parsed };
+      } else if (parsed.businessName) {
+        whatsappConfig.businessName = parsed.businessName;
+      }
+    }
+  } catch (e) {
+    console.warn('Could not read WhatsApp config:', e);
+  }
+
+  const persistWhatsConfig = () => {
+    try {
+      if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
+      fs.writeFileSync(WHATSAPP_CONFIG_FILE, JSON.stringify(whatsappConfig, null, 2), 'utf-8');
+    } catch (e) {
+      console.warn('Could not save WhatsApp config:', e);
+    }
+  };
+
+  // Serve generated PDF files directly
+  app.get('/api/pdf/:filename', (req, res) => {
+    const safeFilename = path.basename(req.params.filename);
+    const filePath = path.join(PDF_DIR, safeFilename);
+    if (fs.existsSync(filePath)) {
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Content-Disposition', `inline; filename="${safeFilename}"`);
+      return res.sendFile(filePath);
+    }
+    return res.status(404).json({ error: 'PDF file not found' });
+  });
+
   // WhatsApp Direct Business Cloud API Endpoint
-  // Sends PDF without opening WhatsApp client, from "مركز الملك للدهانات", with No-Reply enforcement
+  // Dispatches invoice PDF as a document via Meta WhatsApp Business API
   app.post('/api/whatsapp/send-pdf-direct', async (req, res) => {
     try {
       const {
@@ -359,7 +433,7 @@ async function startServer() {
         customerName,
         grandTotal,
         issueDate,
-        businessName = 'مركز الملك للدهانات',
+        businessName = whatsappConfig.businessName || 'مركز الملك للدهانات',
         pdfBase64,
         filename,
         invoiceData,
@@ -383,7 +457,7 @@ async function startServer() {
         persistInvoicesToDisk();
       }
 
-      // Normalize phone number to international format
+      // Normalize phone number to international format (Saudi Arabia: 05xxxxxxxx -> 9665xxxxxxxx)
       let cleanPhone = phone.trim().replace(/[^\d+]/g, '');
       if (cleanPhone.startsWith('+')) cleanPhone = cleanPhone.substring(1);
       if (cleanPhone.startsWith('00')) cleanPhone = cleanPhone.substring(2);
@@ -393,14 +467,45 @@ async function startServer() {
         cleanPhone = '966' + cleanPhone;
       }
 
-      // Determine public invoice link for direct opening on any device/WhatsApp Business
+      // Determine public invoice link and PDF link
       const host = req.get('host') || 'localhost:3000';
       const protocol = req.protocol === 'https' || req.headers['x-forwarded-proto'] === 'https' ? 'https' : 'http';
       const appBase = process.env.APP_URL || `${protocol}://${host}`;
       const publicInvoiceLink = `${appBase}/?inv=${encodeURIComponent(invoiceNumber)}`;
 
-      const phoneNumberId = cloudApiConfig?.phoneNumberId || process.env.WHATSAPP_PHONE_NUMBER_ID;
-      const accessToken = cloudApiConfig?.accessToken || process.env.WHATSAPP_ACCESS_TOKEN;
+      const pdfFileName = filename || `Invoice-${invoiceNumber}.pdf`;
+      const pdfFilePath = path.join(PDF_DIR, pdfFileName);
+      let pdfBuffer: Buffer | null = null;
+
+      if (pdfBase64 && typeof pdfBase64 === 'string') {
+        try {
+          const cleanB64 = pdfBase64.replace(/^data:application\/pdf;base64,/, '').replace(/^data:[^;]+;base64,/, '');
+          pdfBuffer = Buffer.from(cleanB64, 'base64');
+          fs.writeFileSync(pdfFilePath, pdfBuffer);
+        } catch (e) {
+          console.warn('Error saving PDF to disk:', e);
+        }
+      }
+
+      const publicPdfUrl = `${appBase}/api/pdf/${encodeURIComponent(pdfFileName)}`;
+
+      const resolvedPhoneId = (
+        cloudApiConfig?.phoneNumberId ||
+        invoiceData?.company?.whatsappPhoneNumberId ||
+        whatsappConfig.phoneNumberId ||
+        process.env.WHATSAPP_PHONE_NUMBER_ID ||
+        ''
+      ).trim();
+
+      const resolvedToken = (
+        cloudApiConfig?.accessToken ||
+        invoiceData?.company?.whatsappAccessToken ||
+        whatsappConfig.accessToken ||
+        process.env.WHATSAPP_ACCESS_TOKEN ||
+        ''
+      ).trim();
+
+      const hasValidMetaConfig = isValidMetaCredentials(resolvedPhoneId, resolvedToken);
 
       // Construct official No-Reply text with clickable PDF link
       const officialCaption =
@@ -410,48 +515,93 @@ async function startServer() {
         `🔢 *رقم الفاتورة:* ${invoiceNumber}\n` +
         `📅 *التاريخ:* ${issueDate}\n` +
         `💰 *الإجمالي المستحق:* ${grandTotal} ريال سعودي\n\n` +
-        `🔗 *رابط عرض وتحميل الفاتورة PDF مباشرة:*\n` +
-        `${publicInvoiceLink}\n\n` +
-        `📎 تم تجهيز الفاتورة بصيغة PDF. يمكنك فتحها مباشرة من الرابط أعلاه في أي وقت سواء كنت تستخدم WhatsApp العادي أو WhatsApp Business.\n\n` +
-        `----------------------------------------\n` +
-        `📢 *خدمة الإرسال الآلي للفواتير (No-Reply Service):*\n` +
-        `هذه الرسالة تم إرسالها آلياً من نظام إدارة الفواتير لـ *${businessName}*. ` +
-        `هذا الرقم غير مخصص لاستقبال الردود أو المحادثات. للاستفسارات يُرجى مراجعة إدارة المعرض مباشرة.`;
+        `🔗 *رابط العرض والتحقق:* ${publicInvoiceLink}\n\n` +
+        `📢 *خدمة الإرسال الآلي (No-Reply Service):* تم إرسال هذه الفاتورة بصيغة مستند PDF رسمياً من نظام ${businessName}.`;
 
-      // If user configured real Meta WhatsApp Cloud API credentials
-      if (phoneNumberId && accessToken) {
+      // If valid Meta WhatsApp Business Cloud API credentials are configured
+      if (hasValidMetaConfig) {
         try {
+          // Step 1: Upload PDF buffer to Meta Media API if available
+          let mediaId: string | null = null;
+          if (pdfBuffer) {
+            try {
+              const formData = new FormData();
+              formData.append('messaging_product', 'whatsapp');
+              formData.append('type', 'application/pdf');
+              const blob = new Blob([new Uint8Array(pdfBuffer)], { type: 'application/pdf' });
+              formData.append('file', blob, pdfFileName);
+
+              const uploadRes = await fetch(
+                `https://graph.facebook.com/v20.0/${resolvedPhoneId}/media`,
+                {
+                  method: 'POST',
+                  headers: {
+                    Authorization: `Bearer ${resolvedToken}`,
+                  },
+                  body: formData,
+                }
+              );
+
+              if (uploadRes.ok) {
+                const uploadJson: any = await uploadRes.json();
+                if (uploadJson.id) {
+                  mediaId = uploadJson.id;
+                }
+              } else {
+                const uploadErr = await uploadRes.json().catch(() => ({}));
+                console.info('Meta media upload failed, falling back to document link:', uploadErr);
+              }
+            } catch (uploadErr) {
+              console.info('Meta media upload exception, falling back to document link:', uploadErr);
+            }
+          }
+
+          // Step 2: Dispatch the invoice PDF as a DOCUMENT via Meta WhatsApp Business API
+          const documentPayload: any = {
+            caption: officialCaption,
+            filename: pdfFileName,
+          };
+          if (mediaId) {
+            documentPayload.id = mediaId;
+          } else {
+            documentPayload.link = publicPdfUrl;
+          }
+
           const metaPayload: any = {
             messaging_product: 'whatsapp',
             recipient_type: 'individual',
             to: cleanPhone,
-            type: 'text',
-            text: {
-              body: officialCaption,
-            },
+            type: 'document',
+            document: documentPayload,
           };
 
           const metaResponse = await fetch(
-            `https://graph.facebook.com/v20.0/${phoneNumberId}/messages`,
+            `https://graph.facebook.com/v20.0/${resolvedPhoneId}/messages`,
             {
               method: 'POST',
               headers: {
-                Authorization: `Bearer ${accessToken}`,
+                Authorization: `Bearer ${resolvedToken}`,
                 'Content-Type': 'application/json',
               },
               body: JSON.stringify(metaPayload),
             }
           );
 
-          const metaResult = await metaResponse.json();
+          const metaResult = await metaResponse.json().catch(() => ({}));
 
           if (!metaResponse.ok) {
-            console.warn('Meta WhatsApp API returned error:', metaResult);
+            const isOAuth = metaResult?.error?.type === 'OAuthException' || metaResult?.error?.code === 190;
+            console.log(`[Meta Cloud Service] Notice: Response status ${metaResponse.status} (${isOAuth ? 'OAuth token refresh required' : 'API response'})`);
             return res.json({
               success: false,
               requiresMetaConfig: true,
-              error: metaResult?.error?.message || 'فشل الاتصال بـ Meta WhatsApp API. تحقق من صلاحية Access Token.',
+              oauthException: isOAuth,
+              directWhatsAppFallback: true,
+              error: isOAuth
+                ? 'تنبيه مصادقة Meta (OAuthException): رمز الوصول الدائم منتهي الصلاحية أو غير معتمد. يمكنك تحديث الرمز في الإعدادات، أو استخدام زر فتح محادثة العميل في واتساب للإرسال الفوري والمضمون 100%.'
+                : (metaResult?.error?.message || 'تعذر استكمال الإرسال عبر Meta API. تحقق من صلاحية Access Token ومعرف الهاتف.'),
               publicInvoiceLink,
+              publicPdfUrl,
             });
           } else {
             return res.json({
@@ -460,49 +610,91 @@ async function startServer() {
               senderBusinessName: businessName,
               recipient: cleanPhone,
               status: 'DELIVERED',
+              documentSent: true,
+              filename: pdfFileName,
+              mediaId: mediaId || undefined,
               noReply: true,
               metaLive: true,
               publicInvoiceLink,
+              publicPdfUrl,
               timestamp: new Date().toISOString(),
-              message: `تم إرسال الفاتورة بنجاح عبر خوادم Meta WhatsApp الرسمية إلى ${cleanPhone} باسم ${businessName}!`,
+              message: `تم إرسال الفاتورة كمستند PDF رسمي عبر Meta WhatsApp Business API إلى +${cleanPhone} باسم ${businessName}!`,
             });
           }
         } catch (metaError: any) {
-          console.warn('Meta API call failed:', metaError);
+          console.log('[Meta Cloud Service] Exception captured:', metaError?.message || 'Connection failed');
           return res.json({
             success: false,
             requiresMetaConfig: true,
-            error: metaError.message || 'خطأ في الاتصال بخوادم Meta WhatsApp',
+            error: metaError?.message || 'خطأ في الاتصال بخوادم Meta WhatsApp',
             publicInvoiceLink,
+            publicPdfUrl,
           });
         }
       }
 
-      // If Meta credentials are not configured on the server
+      // Optional Demo Simulation Mode for testing PDF document dispatch without live Meta account
+      if (req.body?.simulateDemo) {
+        return res.json({
+          success: true,
+          messageId: `wamid.HBgM${Date.now()}_DEMO`,
+          senderBusinessName: businessName,
+          recipient: cleanPhone,
+          status: 'DELIVERED',
+          documentSent: true,
+          filename: pdfFileName,
+          noReply: true,
+          metaLive: false,
+          simulationMode: true,
+          publicInvoiceLink,
+          publicPdfUrl,
+          timestamp: new Date().toISOString(),
+          message: `[محاكاة Meta API] تم إرسال مستند الفاتورة PDF بنجاح إلى +${cleanPhone} باسم ${businessName}!`,
+        });
+      }
+
+      // If Meta credentials are not valid or not yet configured
       return res.json({
         success: false,
         requiresMetaConfig: true,
-        channel: 'WhatsApp Cloud API',
+        channel: 'Meta WhatsApp Business API',
         recipient: cleanPhone,
         status: 'SETUP_REQUIRED',
         publicInvoiceLink,
-        error: 'خدمة الإرسال السحابي التلقائي بدون فتح واتساب تتطلب ربط حساب Meta WhatsApp Business API في الإعدادات. استخدم زر "إرسال فوري للعميل عبر واتساب" أدناه لتصل الفاتورة لهاتفه فوراً وبشكل حقيقي.',
+        publicPdfUrl,
+        directWhatsAppFallback: true,
+        error:
+          'خدمة إرسال الفاتورة كمستند PDF عبر Meta WhatsApp Business API تتطلب إدخال معرف رقم هاتف صالح ورمز وصول دائم (يبدأ بـ EAA...). يمكنك إدخال البيانات في الإعدادات، أو استخدام زر "فتح محادثة العميل في واتساب" للإرسال الفوري والمؤكد.',
       });
     } catch (err: any) {
       console.error('WhatsApp direct send error:', err);
       return res.status(500).json({
         success: false,
-        error: err.message || 'Failed to send WhatsApp message directly',
+        error: err.message || 'Failed to dispatch WhatsApp document',
       });
     }
   });
 
-  // Config check endpoint
+  // WhatsApp Meta Cloud API Config endpoints
   app.get('/api/whatsapp/config', (_req, res) => {
     res.json({
-      configured: !!(process.env.WHATSAPP_PHONE_NUMBER_ID && process.env.WHATSAPP_ACCESS_TOKEN),
-      defaultBusinessName: 'مركز الملك للدهانات',
+      configured: !!(whatsappConfig.phoneNumberId && whatsappConfig.accessToken),
+      phoneNumberId: whatsappConfig.phoneNumberId ? `${whatsappConfig.phoneNumberId.slice(0, 4)}...${whatsappConfig.phoneNumberId.slice(-4)}` : '',
+      defaultBusinessName: whatsappConfig.businessName || 'مركز الملك للدهانات',
       noReplyEnabled: true,
+    });
+  });
+
+  app.post('/api/whatsapp/config', (req, res) => {
+    const { phoneNumberId, accessToken, businessName } = req.body;
+    if (phoneNumberId !== undefined) whatsappConfig.phoneNumberId = phoneNumberId.trim();
+    if (accessToken !== undefined) whatsappConfig.accessToken = accessToken.trim();
+    if (businessName !== undefined) whatsappConfig.businessName = businessName.trim();
+    persistWhatsConfig();
+    res.json({
+      success: true,
+      configured: !!(whatsappConfig.phoneNumberId && whatsappConfig.accessToken),
+      defaultBusinessName: whatsappConfig.businessName,
     });
   });
 

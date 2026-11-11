@@ -10,13 +10,20 @@ export const translations = {
     // Nav
     nav: {
       dashboard: 'لوحة التحكم',
-      createInvoice: 'إنشاء فاتورة',
-      invoiceHistory: 'سجل الفواتير',
+      createInvoice: 'فاتورة مبيعات جديدة',
+      invoiceHistory: 'سجل المبيعات',
       customers: 'العملاء',
-      products: 'المنتجات',
+      createPurchaseInvoice: 'فاتورة مشتريات جديدة',
+      purchaseHistory: 'سجل المشتريات',
+      suppliers: 'الموردين',
+      products: 'الأصناف والمخزون',
+      reports: 'التقارير والضريبة',
       companySettings: 'إعدادات المنشأة',
       vatTests: 'ضريبة 15% (Vat 15%)',
-      newInvoiceBtn: '+ فاتورة جديدة',
+      newInvoiceBtn: '+ بيع جديد',
+      newPurchaseBtn: '+ شراء جديد',
+      salesMenu: 'المبيعات',
+      purchasesMenu: 'المشتريات',
     },
 
     // Dashboard
@@ -267,8 +274,8 @@ export const translations = {
       backupHelp: 'يمكنك تصدير قاعدة بيانات الفواتير والعملاء والمنتجات كملف JSON لنسخه إلى جهاز آخر، أو استيراد ملف سابق.',
       exportJsonBtn: 'تصدير نسخة احتياطية (Export JSON)',
       importJsonBtn: 'استيراد نسخة سابقة (Import JSON)',
-      resetSamplesBtn: 'استعادة العينات الافتراضية',
-      resetConfirm: 'هل أنت متأكد من استعادة البيانات الافتراضية التجريبية؟ سيتم مسح التعديلات المحلية.',
+      resetSamplesBtn: 'حذف البيانات التجريبية (Remove Demo Data)',
+      resetConfirm: 'هل أنت متأكد من حذف جميع البيانات التجريبية نهائياً والبدء بسجلات المحل الفعلية فقط؟',
     },
 
     // Modals
@@ -317,13 +324,20 @@ export const translations = {
     // Nav
     nav: {
       dashboard: 'Dashboard',
-      createInvoice: 'Create Invoice',
-      invoiceHistory: 'Invoice History',
+      createInvoice: 'New Sales Invoice',
+      invoiceHistory: 'Sales History',
       customers: 'Customers',
-      products: 'Products',
+      createPurchaseInvoice: 'New Purchase Invoice',
+      purchaseHistory: 'Purchase History',
+      suppliers: 'Suppliers',
+      products: 'Products & Stock',
+      reports: 'Reports & VAT',
       companySettings: 'Company Profile',
       vatTests: 'Vat 15%',
-      newInvoiceBtn: '+ New Invoice',
+      newInvoiceBtn: '+ New Sale',
+      newPurchaseBtn: '+ New Purchase',
+      salesMenu: 'Sales',
+      purchasesMenu: 'Purchases',
     },
 
     // Dashboard
@@ -574,8 +588,8 @@ export const translations = {
       backupHelp: 'Export all invoices, customers, and product catalogs as a JSON file, or restore a previous backup.',
       exportJsonBtn: 'Export Backup (JSON)',
       importJsonBtn: 'Import Backup (JSON)',
-      resetSamplesBtn: 'Reset to Sample Data',
-      resetConfirm: 'Are you sure you want to restore default sample data? Local changes will be replaced.',
+      resetSamplesBtn: 'Remove Demo Data',
+      resetConfirm: 'Are you sure you want to permanently remove all demo sample data and start with only your real shop records?',
     },
 
     // Modals

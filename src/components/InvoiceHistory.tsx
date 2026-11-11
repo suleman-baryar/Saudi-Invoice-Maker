@@ -12,6 +12,7 @@ import {
   Plus,
   Printer,
   Smartphone,
+  X,
 } from 'lucide-react';
 import { WhatsAppIcon } from './WhatsAppIcon';
 import { WhatsAppShareModal } from './WhatsAppShareModal';
@@ -44,6 +45,7 @@ export const InvoiceHistory: React.FC<InvoiceHistoryProps> = ({
   const [dateTo, setDateTo] = useState('');
   const [whatsAppModalInvoice, setWhatsAppModalInvoice] = useState<Invoice | null>(null);
   const [smsModalInvoice, setSmsModalInvoice] = useState<Invoice | null>(null);
+  const [deletingInvoice, setDeletingInvoice] = useState<Invoice | null>(null);
   const t = translations[lang].history;
   const isRtl = lang === 'ar';
 
@@ -54,11 +56,8 @@ export const InvoiceHistory: React.FC<InvoiceHistoryProps> = ({
   };
 
   // Handle Delete
-  const handleDelete = (id: string, invoiceNum: string) => {
-    if (window.confirm(`${t.deleteConfirm} ${invoiceNum}?`)) {
-      storage.deleteInvoice(id);
-      onRefresh();
-    }
+  const handleDelete = (inv: Invoice) => {
+    setDeletingInvoice(inv);
   };
 
   // Filtering
@@ -299,9 +298,9 @@ export const InvoiceHistory: React.FC<InvoiceHistoryProps> = ({
 
                         <button
                           type="button"
-                          onClick={() => handleDelete(inv.id, inv.invoiceNumber)}
-                          title="Delete"
-                          className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition"
+                          onClick={() => setDeletingInvoice(inv)}
+                          title={isRtl ? 'حذف هذه الفاتورة نهائياً' : 'Delete Invoice'}
+                          className="p-1.5 text-rose-600 hover:text-white hover:bg-rose-600 bg-rose-50 hover:bg-rose-600 border border-rose-200 rounded-lg transition shadow-2xs"
                         >
                           <Trash2 className="w-4 h-4" />
                         </button>
@@ -314,6 +313,80 @@ export const InvoiceHistory: React.FC<InvoiceHistoryProps> = ({
           </div>
         )}
       </div>
+
+      {/* In-App Delete Invoice Confirmation Modal (100% reliable inside iFrames) */}
+      {deletingInvoice && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs font-sans">
+          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-rose-200 space-y-4">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <div className="flex items-center gap-2.5 text-rose-600 font-extrabold text-base">
+                <div className="w-9 h-9 rounded-xl bg-rose-100 flex items-center justify-center">
+                  <Trash2 className="w-5 h-5 text-rose-600" />
+                </div>
+                <span>{isRtl ? 'تأكيد حذف فاتورة المبيعات' : 'Confirm Invoice Deletion'}</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setDeletingInvoice(null)}
+                className="p-1 text-slate-400 hover:text-slate-600 rounded-lg"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-3.5 bg-rose-50/70 border border-rose-200 rounded-xl space-y-2 text-xs">
+              <div className="flex justify-between items-center text-slate-700">
+                <span className="font-semibold">{isRtl ? 'رقم الفاتورة:' : 'Invoice No:'}</span>
+                <span className="font-mono font-black text-rose-700 text-sm">{deletingInvoice.invoiceNumber}</span>
+              </div>
+              <div className="flex justify-between items-center text-slate-700">
+                <span className="font-semibold">{isRtl ? 'العميل:' : 'Customer:'}</span>
+                <span className="font-bold text-slate-900">
+                  {isRtl ? deletingInvoice.customer.nameAr : (deletingInvoice.customer.nameEn || deletingInvoice.customer.nameAr)}
+                </span>
+              </div>
+              <div className="flex justify-between items-center text-slate-700">
+                <span className="font-semibold">{isRtl ? 'المبلغ الإجمالي:' : 'Grand Total:'}</span>
+                <span className="font-mono font-black text-slate-900">
+                  {formatCurrency(deletingInvoice.grandTotal)} SAR
+                </span>
+              </div>
+              <div className="flex justify-between items-center text-slate-700">
+                <span className="font-semibold">{isRtl ? 'تاريخ الفاتورة:' : 'Date:'}</span>
+                <span className="font-mono text-slate-600">{deletingInvoice.issueDate}</span>
+              </div>
+            </div>
+
+            <p className="text-xs text-slate-600 leading-relaxed">
+              {isRtl
+                ? 'هل أنت متأكد من رغبتك في حذف هذه الفاتورة نهائياً؟ سيتم إزالتها من النظام وحسابات المبيعات فوراً.'
+                : 'Are you sure you want to permanently delete this sales invoice? It will be removed from your records immediately.'}
+            </p>
+
+            <div className="flex items-center justify-end gap-2.5 pt-2">
+              <button
+                type="button"
+                onClick={() => setDeletingInvoice(null)}
+                className="px-4 py-2.5 text-xs font-bold text-slate-700 hover:bg-slate-100 rounded-xl transition border border-slate-300"
+              >
+                {isRtl ? 'إلغاء' : 'Cancel'}
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  storage.deleteInvoice(deletingInvoice.id);
+                  setDeletingInvoice(null);
+                  onRefresh();
+                }}
+                className="px-5 py-2.5 text-xs font-black text-white bg-rose-600 hover:bg-rose-700 active:bg-rose-800 rounded-xl transition shadow-md shadow-rose-600/30 inline-flex items-center gap-1.5"
+              >
+                <Trash2 className="w-4 h-4" />
+                <span>{isRtl ? 'نعم، احذف الفاتورة نهائياً' : 'Yes, Delete Permanently'}</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* WhatsApp Share Modal */}
       {whatsAppModalInvoice && (
